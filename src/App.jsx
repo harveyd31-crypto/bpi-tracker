@@ -133,7 +133,7 @@ function Field({label,value,onChange,placeholder,readOnly=false,highlight=false,
 async function claudeScan(imageB64, mediaType, context) {
   const prompt = context==="sample"
     ? `BPI Agadir barite sample ticket. Extract ALL fields. Return ONLY JSON:
-{"ticketNo":"","date":"","sampleId":"","supplier":"","mineReference":"","tonnage":"","specificGravity":"","collectionPoint":"","samplerName":"","notes":""}
+{"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}
 ONLY JSON.`
     : `BPI Agadir Bon de Transport. Extract ALL fields. Return ONLY JSON:
 {"ticketNo":"","date":"","lieuChargement":"","lieuLivraison":"","marchandise":"","transporteur":"","immatriculation":"","heureDepart":"","fournisseur":"","mineReference":"","qualiteProduit":"","poidsBrut":"","poidsTare":"","poidsNet":"","responsableStock":"","numeroChauffeur":"","societe":""}
@@ -214,7 +214,7 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
   const cameraRef = useRef(null);
   const uploadRef = useRef(null);
 
-  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["sampleId","Sample ID"],["supplier","Supplier"],["mineReference","Mine Reference"],["tonnage","Tonnage"],["specificGravity","Specific Gravity"],["collectionPoint","Collection Point"],["samplerName","Sampler Name"],["notes","Notes"]];
+  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Reference"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
   const TFIELDS=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Reference"],["qualiteProduit","Qualité produit"],["poidsBrut","Poids brut"],["poidsTare","Poids tare"],["poidsNet","Poids net"],["responsableStock","Responsable stock"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
   const fields = context==="sample"?SFIELDS:TFIELDS;
   const weightFields = ["poidsBrut","poidsTare","poidsNet"];
@@ -231,8 +231,10 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
       setExtracted(result);setEdited({...existingData,...result});
       setState("done");setMsg("✓ Ticket read — verify below");
     } catch(err) {
-      setState("error");setMsg("Scan failed: "+err.message);
-      setEdited(existingData||{});
+      setState("error");
+      const isKeyMissing = !import.meta.env.VITE_ANTHROPIC_API_KEY;
+      setMsg(isKeyMissing ? "API key not set in Vercel — fill fields manually below" : "Scan failed: "+err.message);
+      setEdited({...existingData});
     }
   }
 
@@ -305,7 +307,24 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
               );
             })}
           </div>
-          <button onClick={()=>onScanned({...edited,_scanned:true})} style={{...btnBig(SUCCESS),marginTop:20}}>✓ Confirm & Log</button>
+          <div style={{marginTop:20}}>
+            {!edited.ticketNo && !edited.supplier && (
+              <div style={{fontSize:12,color:WARNING,marginBottom:10,textAlign:"center"}}>
+                ⚠ Fill in at least Ticket No or Supplier before confirming
+              </div>
+            )}
+            <button 
+              onClick={()=>{
+                if(Object.keys(edited).filter(k=>edited[k]&&k!=="_scanned").length===0){
+                  alert("Please fill in at least one field before confirming.");
+                  return;
+                }
+                onScanned({...edited,_scanned:true});
+              }} 
+              style={{...btnBig(SUCCESS)}}>
+              ✓ Confirm & Log
+            </button>
+          </div>
         </div>
       )}
 
@@ -489,7 +508,7 @@ function SampleModule({notify,addLog}) {
   async function clear(){await window.storage.delete(SAMPLE_KEY,true);setData(null);lastRef.current=null;}
 
   const ci = data ? SAMPLE_STAGES.findIndex(s=>s.id===data.currentStage) : -1;
-  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["sampleId","Sample ID"],["supplier","Supplier"],["mineReference","Mine Reference"],["tonnage","Tonnage"],["specificGravity","Specific Gravity"],["collectionPoint","Collection Point"],["samplerName","Sampler Name"],["notes","Notes"]];
+  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Reference"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
 
   if(loading) return <div style={{color:TEXT3,padding:40,fontSize:14,textAlign:"center"}}>Loading…</div>;
 
