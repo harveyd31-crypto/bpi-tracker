@@ -3,6 +3,28 @@ import { useState, useEffect, useRef } from "react";
 // Logo is served from /logo.png
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+
+// ─── Cloudinary config ────────────────────────────────────────────────────────
+const CLOUDINARY_CLOUD = "digrxz7uv";
+const CLOUDINARY_API_KEY = "726779314616755";
+const CLOUDINARY_API_SECRET = "WsjsXW2yg6iJCOiIbp8-4LS_150";
+const CLOUDINARY_UPLOAD_PRESET = "bpi_tracker"; // unsigned preset (created below)
+
+async function uploadToCloudinary(file, folder) {
+  // Use unsigned upload with a preset named "bpi_tracker"
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  formData.append("folder", `bpi-tracker/${folder}`);
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+    { method: "POST", body: formData }
+  );
+  if (!res.ok) throw new Error("Cloudinary upload failed: " + res.status);
+  const data = await res.json();
+  return data.secure_url; // URL of uploaded image
+}
+
 const SAMPLE_KEY = "bpi-sample-active-v4";
 const TRUCK_KEY  = "bpi-truck-active-v4";
 const LOG_KEY    = "bpi-log-v4";
@@ -267,11 +289,19 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
     const reader=new FileReader();reader.onload=ev=>setPreview(ev.target.result);reader.readAsDataURL(file);
     setState("scanning");setMsg("Claude is reading your ticket…");
     captureGpsAuto();
+    // Upload photo to Cloudinary (background, non-blocking)
+    const folder = context==="sample" ? "sample-tickets" : "truck-tickets";
+    let photoUrlPromise = uploadToCloudinary(file, folder).catch(err=>{
+      console.warn("Photo upload failed:", err.message);
+      return null;
+    });
     try {
       const b64 = await fileToB64(file);
       const result = await claudeScan(b64,file.type,context);
-      setExtracted(result);setEdited({...existingData,...result});
-      setState("done");setMsg("✓ Ticket read — verify below");
+      const photoUrl = await photoUrlPromise;
+      setExtracted(result);
+      setEdited({...existingData,...result,...(photoUrl?{_photoUrl:photoUrl}:{})});
+      setState("done");setMsg("✓ Ticket read — verify below" + (photoUrl?" 📸":""));
     } catch(err) {
       setState("error");
       const isKeyMissing = !import.meta.env.VITE_ANTHROPIC_API_KEY;
