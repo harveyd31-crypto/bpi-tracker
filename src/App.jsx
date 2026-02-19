@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 // Logo is served from /logo.png
 
@@ -30,28 +32,38 @@ const TRUCK_KEY  = "bpi-truck-active-v4";
 const LOG_KEY    = "bpi-log-v4";
 const POLL_MS    = 3000;
 
-// ─── Storage shim (window.storage in Claude artifacts, localStorage on Vercel) ──
-const _localStorage = {
+// ─── Firebase Firestore (shared real-time storage across all devices) ─────────
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDzg3HPJasesSozO7CXFlNBIQ-9n7n3ZN4",
+  authDomain: "bpi-tracker-e0dab.firebaseapp.com",
+  projectId: "bpi-tracker-e0dab",
+  storageBucket: "bpi-tracker-e0dab.firebasestorage.app",
+  messagingSenderId: "798502862536",
+  appId: "1:798502862536:web:ff49a69f54b5f4b3e9effd"
+};
+
+const _firebaseApp = initializeApp(firebaseConfig);
+const _db = getFirestore(_firebaseApp);
+
+// Firestore storage — each key becomes a document in the "bpi" collection
+const _firestoreStorage = {
   get: async (key) => {
-    const val = localStorage.getItem(key);
-    if (val === null) throw new Error("Key not found: " + key);
-    return { key, value: val };
+    const snap = await getDoc(doc(_db, "bpi", key));
+    if (!snap.exists()) throw new Error("Key not found: " + key);
+    return { key, value: snap.data().value };
   },
   set: async (key, value) => {
-    localStorage.setItem(key, value);
+    await setDoc(doc(_db, "bpi", key), { value, updatedAt: Date.now() });
     return { key, value };
   },
   delete: async (key) => {
-    localStorage.removeItem(key);
+    await deleteDoc(doc(_db, "bpi", key));
     return { key, deleted: true };
   },
-  list: async (prefix) => {
-    const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-    return { keys, prefix };
-  }
 };
-if (typeof window !== "undefined" && !window.storage) {
-  window.storage = _localStorage;
+if (typeof window !== "undefined") {
+  window.storage = _firestoreStorage;
 }
 
 // ─── Design System (Opus redesign) ───────────────────────────────────────────
