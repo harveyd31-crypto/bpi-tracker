@@ -484,8 +484,7 @@ function SampleModule({notify,addLog}) {
 ⛏ Mine Ref:   ${ticket.mineReference||"—"}
 ⚖️ Tonnage:    ${ticket.tonnage||"—"}
 📍 Collection: ${ticket.collectionPoint||"—"}
-${ticket.notes?"📝 Notes: "+ticket.notes+"
-":""}━━━━━━━━━━━━━━━━━━━━
+${ticket.notes?"📝 Notes: "+ticket.notes+"\n":""}━━━━━━━━━━━━━━━━━━━━
 Status: ✅ Collected`
     );
   }
