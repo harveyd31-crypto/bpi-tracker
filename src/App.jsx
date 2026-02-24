@@ -736,7 +736,23 @@ export default function App() {
   const [log,setLog]       = useState([]);
   const toastRef=useRef(null); const pollRef=useRef(null);
 
-  function notify(msg){setToast(msg);clearTimeout(toastRef.current);toastRef.current=setTimeout(()=>setToast(null),5000);}
+  async function sendWhatsApp(msg) {
+    try {
+      await fetch("/api/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+    } catch(e) { console.warn("WhatsApp notify failed:", e.message); }
+  }
+
+  function notify(msg) {
+    setToast(msg);
+    clearTimeout(toastRef.current);
+    toastRef.current = setTimeout(()=>setToast(null), 5000);
+    sendWhatsApp(msg);
+  }
+
   async function loadLog(){try{const r=await window.storage.get(LOG_KEY);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
   async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
