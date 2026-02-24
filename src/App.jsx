@@ -246,7 +246,7 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
     const filled=Object.keys(edited).filter(k=>edited[k]&&!k.startsWith("_"));
     if(!filled.length){alert("Please fill at least one field.");return;}
     setSaving(true);
-    try { await onScanned({...edited,_scanned:true,_geo:geo||null}); }
+    try { await onScanned({...edited,_scanned:true,_geo:geo||null}); reset(); }
     catch(err){ alert("Error: "+(err.message||String(err))); }
     finally{ setSaving(false); }
   }
