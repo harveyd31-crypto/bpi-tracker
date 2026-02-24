@@ -693,9 +693,15 @@ Status: ✅ Unloaded`
 }
 
 // ─── Log Module ───────────────────────────────────────────────────────────────
-function LogModule({entries}) {
+function LogModule({entries, onDelete}) {
   const [expanded,setExpanded] = useState({});
+  const [confirming,setConfirming] = useState(null);
   const toggle = id=>setExpanded(p=>({...p,[id]:!p[id]}));
+  function handleDelete(e, id) {
+    e.stopPropagation();
+    if (confirming===id) { onDelete(id); setConfirming(null); }
+    else { setConfirming(id); setTimeout(()=>setConfirming(null), 3000); }
+  }
 
   if(!entries.length) return (
     <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.4s ease"}}>
@@ -730,7 +736,23 @@ function LogModule({entries}) {
                 </div>
                 {last && <div style={{fontSize:11,color:C.t4,marginTop:2}}>{last.label} · {fmt(last.ts)}</div>}
               </div>
-              <div style={{color:C.t4,fontSize:14,flexShrink:0,transition:"transform 0.2s",transform:open?"rotate(180deg)":"none"}}>▼</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                <button
+                  onClick={e=>handleDelete(e,entry.id)}
+                  style={{
+                    background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",
+                    border:"none",borderRadius:8,
+                    color:confirming===entry.id?"#fff":"#FF453A",
+                    fontSize:12,fontWeight:700,
+                    padding:"6px 10px",fontFamily:"inherit",
+                    transition:"all 0.2s",
+                    whiteSpace:"nowrap",
+                  }}
+                >
+                  {confirming===entry.id?"Confirm?":"Delete"}
+                </button>
+                <div style={{color:C.t4,fontSize:14,transition:"transform 0.2s",transform:open?"rotate(180deg)":"none"}}>▼</div>
+              </div>
             </div>
             {open && (
               <div style={{borderTop:`0.5px solid ${C.border}`,background:"rgba(255,255,255,0.015)",animation:"slideDown 0.2s ease"}}>
@@ -806,6 +828,7 @@ export default function App() {
 
   async function loadLog(){try{const r=await window.storage.get(LOG_KEY);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
   async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
+  async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
 
   const TABS=[
@@ -889,7 +912,7 @@ export default function App() {
         <div style={{padding:"12px 14px 60px"}}>
           {mode==="sample" && <SampleModule notify={notify} addLog={addLog}/>}
           {mode==="truck"  && <TruckModule  notify={notify} addLog={addLog}/>}
-          {mode==="log"    && <LogModule entries={log}/>}
+          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog}/>}
           {!mode && (
             <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
               <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
