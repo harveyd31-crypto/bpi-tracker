@@ -2,200 +2,198 @@ import { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 
-// ─── Cloudinary ───────────────────────────────────────────────────────────────
-const CLOUDINARY_CLOUD  = "digrxz7uv";
-const CLOUDINARY_PRESET = "bpi_tracker";
-
-async function uploadToCloudinary(file, folder) {
-  const fd = new FormData();
-  fd.append("file", file);
-  fd.append("upload_preset", CLOUDINARY_PRESET);
-  fd.append("folder", `bpi-tracker/${folder}`);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method:"POST", body:fd });
-  if (!res.ok) throw new Error("Upload failed " + res.status);
-  return (await res.json()).secure_url;
-}
-
-// ─── Firebase ────────────────────────────────────────────────────────────────
-const _app = initializeApp({
+// ─── Firebase ─────────────────────────────────────────────────────────────────
+const firebaseConfig = {
   apiKey: "AIzaSyDzg3HPJasesSozO7CXFlNBIQ-9n7n3ZN4",
   authDomain: "bpi-tracker-e0dab.firebaseapp.com",
   projectId: "bpi-tracker-e0dab",
   storageBucket: "bpi-tracker-e0dab.firebasestorage.app",
   messagingSenderId: "798502862536",
   appId: "1:798502862536:web:ff49a69f54b5f4b3e9effd"
-});
-const _db = getFirestore(_app);
+};
+const _app = initializeApp(firebaseConfig);
+const _db  = getFirestore(_app);
 window.storage = {
-  get:    async k => { const s=await getDoc(doc(_db,"bpi",k)); if(!s.exists()) throw new Error("Not found"); return {key:k,value:s.data().value}; },
+  get:    async k => { const s=await getDoc(doc(_db,"bpi",k)); if(!s.exists()) throw new Error("not found"); return {key:k,value:s.data().value}; },
   set:    async (k,v) => { await setDoc(doc(_db,"bpi",k),{value:v,updatedAt:Date.now()}); return {key:k,value:v}; },
   delete: async k => { await deleteDoc(doc(_db,"bpi",k)); return {key:k,deleted:true}; },
 };
 
+// ─── Cloudinary ───────────────────────────────────────────────────────────────
+const CL_CLOUD  = "digrxz7uv";
+const CL_PRESET = "bpi_tracker";
+async function uploadPhoto(file, folder) {
+  const fd = new FormData();
+  fd.append("file", file); fd.append("upload_preset", CL_PRESET); fd.append("folder", `bpi-tracker/${folder}`);
+  const r = await fetch(`https://api.cloudinary.com/v1_1/${CL_CLOUD}/image/upload`,{method:"POST",body:fd});
+  if(!r.ok) throw new Error("Upload failed");
+  return (await r.json()).secure_url;
+}
+
+// ─── Claude OCR ───────────────────────────────────────────────────────────────
+const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
+async function claudeScan(b64, mime, ctx) {
+  const prompt = ctx==="sample"
+    ? `BPI barite sample ticket. Return ONLY JSON: {"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}`
+    : `BPI Bon de Transport. Return ONLY JSON: {"ticketNo":"","date":"","lieuChargement":"","lieuLivraison":"","marchandise":"","transporteur":"","immatriculation":"","heureDepart":"","fournisseur":"","mineReference":"","qualiteProduit":"","poidsBrut":"","poidsTare":"","poidsNet":"","responsableStock":"","numeroChauffeur":"","societe":""}`;
+  const resp = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime||"image/jpeg",data:b64}},{type:"text",text:prompt}]}]})
+  });
+  const data = await resp.json();
+  if(data.error) throw new Error(data.error.message);
+  return JSON.parse(data.content.map(c=>c.text||"").join("").trim().replace(/```json|```/g,"").trim());
+}
+async function fileToB64(file) {
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
-const API_KEY    = import.meta.env.VITE_ANTHROPIC_API_KEY;
 const SAMPLE_KEY = "bpi-sample-active-v4";
 const TRUCK_KEY  = "bpi-truck-active-v4";
 const LOG_KEY    = "bpi-log-v4";
 const POLL_MS    = 3000;
 
 const SAMPLE_STAGES = [
-  { id:"collected",   label:"Collected",    sub:"Ticket scanned at mine",   color:"#FF9F0A" },
-  { id:"stock",       label:"At Stock",      sub:"Delivered to stockyard",   color:"#30D158" },
-  { id:"preparation", label:"Preparation",   sub:"Sample being prepared",    color:"#0A84FF" },
-  { id:"lab",         label:"At Lab",        sub:"Sent to laboratory",       color:"#BF5AF2" },
+  { id:"collected",   label:"Collected",     sub:"Ticket scanned at mine",     color:"#FF9F0A" },
+  { id:"stock",       label:"At Stockyard",  sub:"Delivered to Agadir stock",  color:"#30D158" },
+  { id:"preparation", label:"Preparation",   sub:"Sample being prepared",      color:"#0A84FF" },
+  { id:"lab",         label:"At Lab",        sub:"Sent to laboratory",         color:"#BF5AF2" },
 ];
 const TRUCK_STAGES = [
-  { id:"loaded",   label:"Loaded",   sub:"Ticket scanned at mine",   color:"#FF9F0A" },
-  { id:"unloaded", label:"Unloaded", sub:"Weights logged in Agadir", color:"#30D158" },
+  { id:"loaded",   label:"Truck Loaded",    sub:"Scanned at mine site",      color:"#FF9F0A" },
+  { id:"unloaded", label:"Truck Unloaded",  sub:"Weights confirmed Agadir",  color:"#30D158" },
 ];
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
 const fmt = iso => {
-  if (!iso) return "—";
+  if(!iso) return "—";
   return new Date(iso).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 };
-const fmtCoords = (lat,lng) =>
-  lat&&lng ? `${Math.abs(lat).toFixed(4)}°${lat>=0?"N":"S"}  ${Math.abs(lng).toFixed(4)}°${lng>=0?"E":"W"}` : null;
-
-async function claudeScan(b64, mime, ctx) {
-  const prompt = ctx==="sample"
-    ? `BPI Agadir sample ticket. Extract ALL fields. ONLY JSON:\n{"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}`
-    : `BPI Agadir Bon de Transport. Extract ALL fields. ONLY JSON:\n{"ticketNo":"","date":"","lieuChargement":"","lieuLivraison":"","marchandise":"","transporteur":"","immatriculation":"","heureDepart":"","fournisseur":"","mineReference":"","qualiteProduit":"","poidsBrut":"","poidsTare":"","poidsNet":"","responsableStock":"","numeroChauffeur":"","societe":""}`;
-  const r = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",
-    headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mime||"image/jpeg",data:b64}},{type:"text",text:prompt}]}]})
-  });
-  const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
-  return JSON.parse(d.content.map(c=>c.text||"").join("").trim().replace(/```json|```/g,"").trim());
-}
-async function fileToB64(f) {
-  return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(f);});
-}
+const fmtCoords = (lat,lng) => lat&&lng
+  ? `${Math.abs(lat).toFixed(4)}°${lat>=0?"N":"S"} ${Math.abs(lng).toFixed(4)}°${lng>=0?"E":"W"}`
+  : null;
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg0:"#000",bg1:"#1C1C1E",bg2:"#2C2C2E",bg3:"#3A3A3C",
-  sep:"rgba(255,255,255,0.08)",
-  t1:"#fff",t2:"rgba(255,255,255,0.55)",t3:"rgba(255,255,255,0.25)",
-  blue:"#0A84FF",green:"#30D158",orange:"#FF9F0A",
-  red:"#FF453A",purple:"#BF5AF2",
+  bg0:"#000000", bg1:"#0d0d0d", bg2:"#141414", bg3:"#1c1c1e", bg4:"#242424",
+  border:"rgba(255,255,255,0.10)", borderStrong:"rgba(255,255,255,0.18)",
+  glass:"rgba(255,255,255,0.05)",
+  t1:"#ffffff", t2:"rgba(235,235,245,0.80)", t3:"rgba(235,235,245,0.50)", t4:"rgba(235,235,245,0.25)",
+  accent:"#FF9F0A", blue:"#0A84FF", green:"#30D158", purple:"#BF5AF2", red:"#FF453A",
 };
 
-// ─── Global CSS ───────────────────────────────────────────────────────────────
-function GlobalStyle() {
+const GLOBAL_CSS = `
+  *, *::before, *::after { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; background:#000; overscroll-behavior:none; }
+  body { font-family:-apple-system,"SF Pro Display","SF Pro Text",BlinkMacSystemFont,"Helvetica Neue",sans-serif; }
+  @keyframes fadeUp   { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none} }
+  @keyframes scaleIn  { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
+  @keyframes slideDown{ from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+  @keyframes spin     { to{transform:rotate(360deg)} }
+  @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.25} }
+  @keyframes shimmer  { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  ::-webkit-scrollbar { width:0; }
+  input { -webkit-appearance:none; }
+  .tap:active  { transform:scale(0.97) !important; }
+  .tapSm:active{ transform:scale(0.95) !important; }
+  .field-input:focus { outline:none; border-color:rgba(255,159,10,0.6) !important; box-shadow:0 0 0 3px rgba(255,159,10,0.12) !important; background:rgba(255,255,255,0.07) !important; }
+  .skeleton { background:linear-gradient(90deg,rgba(255,255,255,.03) 25%,rgba(255,255,255,.07) 50%,rgba(255,255,255,.03) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:12px; }
+`;
+
+// ─── Base components ──────────────────────────────────────────────────────────
+const Divider = ({style})=><div style={{height:"0.5px",background:C.border,...style}}/>;
+
+const Spinner = ({size=20,color=C.accent})=>(
+  <div style={{width:size,height:size,borderRadius:"50%",border:`2px solid ${color}25`,borderTopColor:color,animation:"spin 0.7s linear infinite",flexShrink:0}}/>
+);
+
+function Pill({label,color,small}) {
   return (
-    <style>{`
-      *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-      html,body{margin:0;padding:0;background:#000;overscroll-behavior:none}
-      body{font-family:-apple-system,"SF Pro Display","SF Pro Text",BlinkMacSystemFont,sans-serif;color:#fff}
-      @keyframes spin{to{transform:rotate(360deg)}}
-      @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-      @keyframes slideUp{from{opacity:0;transform:translateY(20px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
-      @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
-      ::-webkit-scrollbar{width:0}
-      input{-webkit-appearance:none}
-      button{cursor:pointer}
-      button:active{transform:scale(0.97)!important}
-      .ios-input{
-        width:100%;box-sizing:border-box;
-        padding:11px 14px;
-        background:rgba(255,255,255,0.07);
-        border:1px solid rgba(255,255,255,0.1);
-        border-radius:10px;color:#fff;
-        font-family:inherit;font-size:15px;
-        outline:none;transition:border-color 0.15s,background 0.15s
-      }
-      .ios-input:focus{background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.35)}
-      .ios-input::placeholder{color:rgba(255,255,255,0.3)}
-      .fade{animation:fadeIn 0.3s ease forwards}
-    `}</style>
+    <span style={{
+      display:"inline-flex",alignItems:"center",gap:4,
+      background:`${color}15`,border:`0.5px solid ${color}35`,
+      borderRadius:20,padding:small?"2px 7px":"3px 10px",
+      fontSize:small?9:11,color,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",
+    }}>
+      <span style={{width:4,height:4,borderRadius:"50%",background:color,flexShrink:0}}/>
+      {label}
+    </span>
   );
 }
 
-// ─── Primitives ───────────────────────────────────────────────────────────────
-function Spinner({size=20,color=C.t3}) {
-  return <div style={{width:size,height:size,border:`2px solid ${color}33`,borderTopColor:color,borderRadius:"50%",animation:"spin 0.7s linear infinite",flexShrink:0}}/>;
-}
-
-function Card({children,style={}}) {
-  return <div style={{background:C.bg1,borderRadius:16,overflow:"hidden",marginBottom:8,...style}}>{children}</div>;
-}
-
-function Sep() { return <div style={{height:1,background:C.sep}}/>; }
-
-function Row({label,value,color,last,icon}) {
+function Card({children,style,accent,tap,onClick}) {
   return (
-    <div style={{display:"flex",alignItems:"center",padding:"12px 16px",borderBottom:last?"none":`1px solid ${C.sep}`,gap:12}}>
-      {icon && <span style={{fontSize:16,flexShrink:0}}>{icon}</span>}
-      <span style={{fontSize:15,color:C.t2,flex:1,letterSpacing:"-0.01em"}}>{label}</span>
-      <span style={{fontSize:15,color:color||C.t1,fontWeight:500,textAlign:"right",maxWidth:"55%",wordBreak:"break-word"}}>{value||"—"}</span>
+    <div className={tap?"tap":""} onClick={onClick} style={{
+      background:"linear-gradient(145deg,rgba(255,255,255,0.052),rgba(255,255,255,0.025))",
+      backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",
+      border:`0.5px solid ${accent?`${accent}30`:C.border}`,
+      borderRadius:22,overflow:"hidden",
+      boxShadow:accent?`0 0 0 0.5px ${accent}12 inset,0 8px 32px rgba(0,0,0,0.5)`:"0 4px 24px rgba(0,0,0,0.35)",
+      transition:"transform 0.15s",
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+function Field({label,value,onChange,placeholder,readOnly,highlight,big}) {
+  return (
+    <div>
+      <div style={{fontSize:10,fontWeight:700,color:highlight?C.accent:C.t4,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:5,paddingLeft:2}}>{label}</div>
+      <input className="field-input" value={value||""} onChange={onChange} placeholder={placeholder||""} readOnly={readOnly}
+        style={{
+          width:"100%",background:readOnly?"rgba(255,255,255,0.02)":"rgba(255,255,255,0.05)",
+          border:`0.5px solid ${highlight?`${C.accent}45`:C.border}`,
+          borderRadius:11,padding:big?"13px 13px":"11px 13px",
+          fontSize:big?17:14,fontWeight:big?600:400,
+          color:readOnly?C.t4:highlight?C.accent:C.t1,
+          transition:"all 0.2s",cursor:readOnly?"default":"text",
+        }}
+      />
     </div>
   );
 }
 
-function SectionLabel({text}) {
-  return <div style={{fontSize:13,fontWeight:600,color:C.t3,letterSpacing:"0.06em",padding:"20px 16px 8px",textTransform:"uppercase"}}>{text}</div>;
-}
-
-function PrimaryBtn({label,onPress,color=C.blue,disabled,loading,icon}) {
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function Toast({msg,onClose}) {
+  if(!msg) return null;
   return (
-    <button onClick={onPress} disabled={disabled||loading}
-      style={{width:"100%",padding:"16px",background:disabled?C.bg3:color,color:disabled?C.t3:"#fff",
-        border:"none",borderRadius:14,fontSize:17,fontWeight:600,letterSpacing:"-0.01em",
-        display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-        opacity:disabled?0.4:1,fontFamily:"inherit",transition:"opacity 0.15s"}}>
-      {loading?<Spinner size={20} color="#fff"/>:icon&&<span style={{fontSize:19}}>{icon}</span>}
-      {label}
-    </button>
-  );
-}
-
-function GhostBtn({label,onPress,color=C.blue}) {
-  return (
-    <button onClick={onPress}
-      style={{background:"none",border:"none",color,fontSize:17,fontWeight:500,
-        padding:"12px 16px",width:"100%",textAlign:"center",fontFamily:"inherit"}}>
-      {label}
-    </button>
-  );
-}
-
-function Pill({label,color}) {
-  return (
-    <div style={{display:"inline-flex",alignItems:"center",gap:6,background:`${color}20`,borderRadius:20,padding:"5px 12px"}}>
-      <div style={{width:6,height:6,borderRadius:"50%",background:color,animation:"pulse 2s infinite"}}/>
-      <span style={{fontSize:12,fontWeight:600,color,letterSpacing:"0.04em"}}>{label}</span>
+    <div style={{position:"fixed",bottom:108,left:14,right:14,zIndex:9999,animation:"fadeUp 0.35s cubic-bezier(0.34,1.56,0.64,1)"}}>
+      <div style={{
+        background:"rgba(28,28,30,0.96)",backdropFilter:"blur(40px)",WebkitBackdropFilter:"blur(40px)",
+        border:"0.5px solid rgba(255,255,255,0.14)",borderRadius:18,
+        padding:"13px 16px",display:"flex",alignItems:"center",gap:12,
+        boxShadow:"0 16px 48px rgba(0,0,0,0.7)",
+      }}>
+        <div style={{width:32,height:32,borderRadius:10,background:`${C.accent}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>◈</div>
+        <span style={{flex:1,color:C.t1,fontSize:13,lineHeight:1.4}}>{msg}</span>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.07)",border:"none",borderRadius:7,color:C.t3,width:26,height:26,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,padding:0,flexShrink:0}}>×</button>
+      </div>
     </div>
   );
 }
 
 // ─── Map ──────────────────────────────────────────────────────────────────────
 function MapEmbed({lat,lng}) {
-  const [open,setOpen] = useState(false);
-  const url = `https://www.openstreetmap.org/export/embed.html?bbox=${lng-0.02},${lat-0.015},${lng+0.02},${lat+0.015}&layer=mapnik&marker=${lat},${lng}`;
+  const [open,setOpen]=useState(false);
+  const url=`https://www.openstreetmap.org/export/embed.html?bbox=${lng-.02},${lat-.015},${lng+.02},${lat+.015}&layer=mapnik&marker=${lat},${lng}`;
   return (
-    <div style={{borderRadius:12,overflow:"hidden",border:`1px solid ${C.sep}`,marginTop:12}}>
-      <div onClick={()=>setOpen(v=>!v)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:C.bg2,cursor:"pointer"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <span>📍</span>
-          <span style={{fontSize:14,color:C.t2}}>{fmtCoords(lat,lng)}</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <a href={`https://maps.apple.com/?ll=${lat},${lng}`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:13,color:C.blue,textDecoration:"none"}}>Open in Maps</a>
-          <span style={{color:C.t3,fontSize:12}}>{open?"▲":"▼"}</span>
+    <div style={{marginTop:10,borderRadius:14,overflow:"hidden",border:`0.5px solid ${C.border}`}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",cursor:"pointer",background:"rgba(255,255,255,0.03)"}}>
+        <span style={{fontSize:13,color:C.accent,fontWeight:500}}>📍 {fmtCoords(lat,lng)}</span>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <a href={`https://maps.apple.com/?ll=${lat},${lng}&z=15`} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{fontSize:12,color:C.blue,textDecoration:"none",fontWeight:600}}>Open ↗</a>
+          <span style={{color:C.t4,fontSize:12,transition:"transform 0.2s",display:"inline-block",transform:open?"rotate(180deg)":"none"}}>▼</span>
         </div>
       </div>
-      {open && <div style={{height:180}}><iframe src={url} style={{width:"100%",height:"100%",border:"none",filter:"invert(90%) hue-rotate(180deg) saturate(0.5)"}} title="map" loading="lazy"/></div>}
+      {open && <div style={{height:170}}><iframe src={url} style={{width:"100%",height:"100%",border:"none",filter:"invert(88%) hue-rotate(180deg) saturate(0.5)"}} title="map" loading="lazy"/></div>}
     </div>
   );
 }
 
 // ─── Scan Panel ───────────────────────────────────────────────────────────────
 function ScanPanel({context,onScanned,existingData={},onManual}) {
-  const [phase,setPhase]     = useState("idle");
+  const [state,setState]     = useState("idle");
   const [msg,setMsg]         = useState("");
   const [preview,setPreview] = useState(null);
   const [extracted,setExtracted] = useState(null);
@@ -203,21 +201,21 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
   const [geo,setGeo]         = useState(null);
   const [geoMsg,setGeoMsg]   = useState("");
   const [saving,setSaving]   = useState(false);
-  const camRef    = useRef(null);
-  const uploadRef = useRef(null);
+  const camRef  = useRef(null);
+  const upRef   = useRef(null);
 
-  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
-  const TFIELDS=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
-  const WFIELDS = ["poidsBrut","poidsTare","poidsNet"];
-  const fields = context==="sample"?SFIELDS:TFIELDS;
+  const SF=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
+  const TF=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité produit"],["poidsBrut","Poids brut"],["poidsTare","Poids tare"],["poidsNet","Poids net"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
+  const fields = context==="sample"?SF:TF;
+  const wF = ["poidsBrut","poidsTare","poidsNet"];
 
-  function reset(){setPhase("idle");setPreview(null);setExtracted(null);setEdited({});setGeo(null);setGeoMsg("");setSaving(false);}
+  function reset(){setState("idle");setPreview(null);setExtracted(null);setEdited({});setGeo(null);setGeoMsg("");setSaving(false);}
 
-  function captureGps() {
+  function captureGps(){
     if(!navigator.geolocation){setGeoMsg("GPS unavailable");return;}
-    setGeoMsg("Acquiring GPS…");
+    setGeoMsg("Acquiring location…");
     navigator.geolocation.getCurrentPosition(
-      p=>{const g={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:Math.round(p.coords.accuracy)};setGeo(g);setGeoMsg(`${fmtCoords(g.lat,g.lng)} · ±${g.accuracy}m`);},
+      p=>{const g={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:Math.round(p.coords.accuracy)};setGeo(g);setGeoMsg(`${fmtCoords(g.lat,g.lng)} ±${g.accuracy}m`);},
       ()=>setGeoMsg("Location denied"),
       {enableHighAccuracy:true,timeout:12000}
     );
@@ -225,127 +223,142 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
 
   async function handle(file) {
     if(!file) return;
-    const fr=new FileReader();fr.onload=e=>setPreview(e.target.result);fr.readAsDataURL(file);
-    setPhase("scanning");setMsg("Reading ticket…");captureGps();
+    const reader=new FileReader(); reader.onload=e=>setPreview(e.target.result); reader.readAsDataURL(file);
+    setState("scanning"); setMsg("Reading ticket…");
+    captureGps();
     const folder=context==="sample"?"sample-tickets":"truck-tickets";
-    const photoP=uploadToCloudinary(file,folder).catch(()=>null);
+    const photoP=uploadPhoto(file,folder).catch(()=>null);
     try {
       const b64=await fileToB64(file);
       const result=await claudeScan(b64,file.type,context);
-      const photo=await photoP;
+      const photoUrl=await photoP;
       setExtracted(result);
-      setEdited({...existingData,...result,...(photo?{_photoUrl:photo}:{})});
-      setPhase("done");setMsg("Ticket read successfully");
+      setEdited({...existingData,...result,...(photoUrl?{_photoUrl:photoUrl}:{})});
+      setState("done"); setMsg("Ticket read — verify fields");
     } catch(err) {
-      setPhase("error");
-      setMsg(!API_KEY?"API key not configured — enter fields manually":err.message);
+      setState("error");
+      setMsg(!API_KEY?"API key not configured — fill manually":"Scan failed: "+err.message);
       setEdited({...existingData});
     }
   }
 
   async function confirm() {
     const filled=Object.keys(edited).filter(k=>edited[k]&&!k.startsWith("_"));
-    if(!filled.length){alert("Fill in at least one field.");return;}
+    if(!filled.length){alert("Please fill at least one field.");return;}
     setSaving(true);
     try { await onScanned({...edited,_scanned:true,_geo:geo||null}); }
-    catch(e){ alert("Error saving: "+(e.message||String(e))); }
-    finally { setSaving(false); }
+    catch(err){ alert("Error: "+(err.message||String(err))); }
+    finally{ setSaving(false); }
   }
 
   return (
-    <div>
+    <div style={{animation:"fadeUp 0.3s ease"}}>
       <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={e=>{reset();setTimeout(()=>handle(e.target.files[0]),50);}} style={{display:"none"}}/>
-      <input ref={uploadRef} type="file" accept="image/*" onChange={e=>{reset();setTimeout(()=>handle(e.target.files[0]),50);}} style={{display:"none"}}/>
+      <input ref={upRef}  type="file" accept="image/*" onChange={e=>{reset();setTimeout(()=>handle(e.target.files[0]),50);}} style={{display:"none"}}/>
 
-      {phase==="idle" && (
-        <div className="fade">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <button onClick={()=>{reset();camRef.current?.click();}}
-              style={{padding:"22px 12px",background:C.blue,border:"none",borderRadius:14,color:"#fff",fontSize:16,fontWeight:600,display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit"}}>
-              <span style={{fontSize:28}}>📷</span>Take Photo
-            </button>
-            <button onClick={()=>{reset();uploadRef.current?.click();}}
-              style={{padding:"22px 12px",background:C.bg2,border:`1px solid ${C.sep}`,borderRadius:14,color:C.t1,fontSize:16,fontWeight:600,display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit"}}>
-              <span style={{fontSize:28}}>🖼</span>Upload
-            </button>
-          </div>
-          {onManual && <GhostBtn label="Enter manually instead" onPress={onManual} color={C.blue}/>}
-        </div>
-      )}
+      {/* Scan buttons */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        <button className="tap" onClick={()=>{reset();camRef.current?.click();}} style={{
+          background:`linear-gradient(145deg,${C.accent},#E8890A)`,border:"none",borderRadius:16,
+          padding:"17px 14px",color:"#000",fontWeight:700,fontSize:15,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+          boxShadow:`0 6px 20px ${C.accent}45`,transition:"all 0.2s",letterSpacing:"-0.01em",
+        }}>📷 Camera</button>
+        <button className="tap" onClick={()=>{reset();upRef.current?.click();}} style={{
+          background:"rgba(255,255,255,0.06)",border:`0.5px solid ${C.borderStrong}`,
+          borderRadius:16,padding:"17px 14px",color:C.t1,fontWeight:600,fontSize:15,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,transition:"all 0.2s",
+        }}>🖼 Upload</button>
+      </div>
 
+      {/* Preview */}
       {preview && (
-        <div style={{borderRadius:14,overflow:"hidden",marginBottom:12,position:"relative"}}>
-          <img src={preview} alt="ticket" style={{width:"100%",maxHeight:200,objectFit:"cover",display:"block"}}/>
-          <button onClick={reset} style={{position:"absolute",top:10,right:10,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:8,color:"#fff",width:32,height:32,fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        <div style={{marginBottom:14,borderRadius:16,overflow:"hidden",position:"relative",animation:"scaleIn 0.22s ease"}}>
+          <img src={preview} alt="ticket" style={{width:"100%",maxHeight:190,objectFit:"cover",display:"block"}}/>
+          <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,0.5),transparent)"}}/>
+          <button onClick={reset} style={{position:"absolute",top:10,right:10,background:"rgba(0,0,0,0.65)",backdropFilter:"blur(8px)",border:"none",borderRadius:"50%",color:C.t1,width:30,height:30,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>×</button>
         </div>
       )}
 
-      {phase==="scanning" && (
-        <Card style={{marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",gap:14,padding:"18px 16px"}}>
-            <Spinner size={22} color={C.blue}/>
+      {/* Status */}
+      {state==="scanning" && (
+        <Card style={{padding:"16px 18px",marginBottom:12,display:"flex",alignItems:"center",gap:12}}>
+          <Spinner/>
+          <div>
+            <div style={{fontSize:13,color:C.t1,fontWeight:600}}>{msg}</div>
+            {geoMsg && <div style={{fontSize:11,color:C.t3,marginTop:2}}>{geoMsg}</div>}
+          </div>
+        </Card>
+      )}
+      {state==="error" && (
+        <Card accent={C.red} style={{padding:"14px 18px",marginBottom:12}}>
+          <div style={{fontSize:13,color:C.red,fontWeight:600,marginBottom:2}}>⚠ Scan Failed</div>
+          <div style={{fontSize:12,color:C.t2}}>{msg}</div>
+        </Card>
+      )}
+
+      {/* GPS */}
+      {geoMsg && state!=="idle" && state!=="scanning" && (
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 13px",marginBottom:10,background:geo?"rgba(48,209,88,0.07)":"rgba(255,255,255,0.03)",borderRadius:11,border:`0.5px solid ${geo?`${C.green}28`:C.border}`}}>
+          <span style={{fontSize:12}}>📍</span>
+          <span style={{fontSize:11,color:geo?C.green:C.t3,fontWeight:500}}>{geoMsg}</span>
+        </div>
+      )}
+
+      {/* Fields */}
+      {(state==="done"||state==="error") && (
+        <Card accent={state==="done"?C.green:undefined} style={{overflow:"visible",marginBottom:14,animation:"scaleIn 0.22s ease"}}>
+          <div style={{padding:"14px 18px 12px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
-              <div style={{fontSize:15,fontWeight:600,marginBottom:2}}>{msg}</div>
-              {geoMsg && <div style={{fontSize:13,color:C.t2}}>{geoMsg}</div>}
+              <div style={{fontSize:11,color:state==="done"?C.green:C.t3,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase"}}>
+                {state==="done"?"✓ Fields Extracted":"Manual Entry"}
+              </div>
+              <div style={{fontSize:12,color:C.t3,marginTop:1}}>Review and confirm</div>
             </div>
+            {onManual && <button className="tapSm" onClick={onManual} style={{background:"rgba(255,255,255,0.05)",border:`0.5px solid ${C.border}`,borderRadius:9,padding:"6px 11px",fontSize:11,color:C.t2,fontWeight:600}}>Manual</button>}
           </div>
-        </Card>
-      )}
-
-      {phase==="error" && (
-        <Card style={{marginBottom:12}}>
-          <div style={{padding:"14px 16px",display:"flex",gap:12}}>
-            <span style={{fontSize:20}}>⚠️</span>
-            <span style={{fontSize:14,color:C.t2,lineHeight:1.5}}>{msg}</span>
-          </div>
-        </Card>
-      )}
-
-      {(phase==="done"||phase==="error") && geoMsg && (
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 4px",marginBottom:8}}>
-          <span style={{fontSize:13}}>📍</span>
-          <span style={{fontSize:13,color:geo?C.green:C.t3}}>{geoMsg}</span>
-        </div>
-      )}
-
-      {(phase==="done"||phase==="error") && (
-        <div className="fade">
-          {phase==="done" && (
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 4px",marginBottom:12}}>
-              <Pill label="Read" color={C.green}/>
-              <span style={{fontSize:14,color:C.t2}}>Review and confirm fields</span>
-            </div>
-          )}
-
+          <Divider/>
           {context==="truck" && (
-            <>
-              <SectionLabel text="Weights"/>
-              <Card style={{marginBottom:8}}>
-                {["poidsBrut","poidsTare","poidsNet"].map((k,i)=>(
-                  <div key={k} style={{padding:"10px 16px",borderBottom:i<2?`1px solid ${C.sep}`:"none"}}>
-                    <div style={{fontSize:12,color:C.t2,marginBottom:5}}>{["Poids brut","Poids tare","Poids net"][i]}</div>
-                    <input className="ios-input" value={edited[k]||""} onChange={e=>setEdited(p=>({...p,[k]:e.target.value}))} placeholder="e.g. 32 T"/>
-                  </div>
+            <div style={{padding:"12px 18px",background:"rgba(255,159,10,0.04)"}}>
+              <div style={{fontSize:10,color:C.accent,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:10}}>⚖ Weights</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                {wF.map(k=>(
+                  <Field key={k} label={{poidsBrut:"Brut",poidsTare:"Tare",poidsNet:"Net"}[k]}
+                    value={edited[k]||""} onChange={e=>setEdited(p=>({...p,[k]:e.target.value}))} highlight big/>
                 ))}
-              </Card>
-            </>
+              </div>
+            </div>
           )}
+          <div style={{padding:"12px 18px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 12px"}}>
+            {fields.filter(([k])=>!wF.includes(k)).map(([k,l])=>(
+              <Field key={k} label={l} value={edited[k]||""} onChange={e=>setEdited(p=>({...p,[k]:e.target.value}))} highlight={!!(extracted&&extracted[k])}/>
+            ))}
+          </div>
+          <div style={{padding:"4px 18px 18px"}}>
+            {!edited.ticketNo&&!edited.supplier && (
+              <div style={{fontSize:11,color:C.accent,marginBottom:8,textAlign:"center",padding:"7px 12px",background:`${C.accent}09`,borderRadius:9,border:`0.5px solid ${C.accent}18`}}>
+                Add Ticket No or Supplier first
+              </div>
+            )}
+            <button className="tap" onClick={confirm} disabled={saving} style={{
+              width:"100%",background:saving?"rgba(255,255,255,0.05)":`linear-gradient(145deg,${C.green},#25a145)`,
+              border:"none",borderRadius:14,padding:"16px 20px",
+              color:saving?C.t3:"#000",fontWeight:700,fontSize:15,letterSpacing:"-0.01em",
+              display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+              boxShadow:saving?"none":`0 6px 20px ${C.green}38`,transition:"all 0.2s",
+            }}>
+              {saving?<><Spinner size={16} color={C.t3}/> Saving…</>:"✓ Confirm & Log"}
+            </button>
+          </div>
+        </Card>
+      )}
 
-          <SectionLabel text="Ticket Fields"/>
-          <Card style={{marginBottom:16}}>
-            {fields.filter(([k])=>!WFIELDS.includes(k)).map(([k,l],i,arr)=>{
-              const changed=extracted?.[k]&&extracted[k]!==existingData?.[k];
-              return (
-                <div key={k} style={{padding:"10px 16px",borderBottom:i<arr.length-1?`1px solid ${C.sep}`:"none"}}>
-                  <div style={{fontSize:12,color:changed?C.orange:C.t2,marginBottom:5,fontWeight:changed?600:400}}>{l}</div>
-                  <input className="ios-input" value={edited[k]||""} onChange={e=>setEdited(p=>({...p,[k]:e.target.value}))} placeholder={l} style={{borderColor:changed?`${C.orange}50`:undefined}}/>
-                </div>
-              );
-            })}
-          </Card>
-
-          <PrimaryBtn label={saving?"Saving…":"Confirm & Log"} onPress={confirm} loading={saving} color={C.green}/>
-        </div>
+      {state==="idle" && onManual && (
+        <button onClick={onManual} style={{
+          width:"100%",background:"rgba(255,255,255,0.03)",border:`0.5px solid ${C.border}`,
+          borderRadius:14,padding:"14px 20px",color:C.t3,fontSize:14,fontWeight:500,
+          display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:4,
+        }}>✏ Enter manually instead</button>
       )}
     </div>
   );
@@ -354,24 +367,35 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
 // ─── Pipeline ─────────────────────────────────────────────────────────────────
 function Pipeline({stages,currentIndex,history,children}) {
   return (
-    <div style={{padding:"0 16px"}}>
+    <div>
       {stages.map((stage,i)=>{
-        const done=i<currentIndex, cur=i===currentIndex, pend=i>currentIndex;
+        const done=i<currentIndex, cur=i===currentIndex, pending=i>currentIndex;
         return (
-          <div key={stage.id} style={{display:"flex",gap:16,opacity:pend?0.35:1,transition:"opacity 0.4s"}}>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:36,flexShrink:0}}>
-              <div style={{width:36,height:36,borderRadius:12,background:cur?stage.color:done?`${stage.color}25`:C.bg2,border:`1.5px solid ${done||cur?stage.color:C.bg3}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:cur?"#000":done?stage.color:C.t3,fontWeight:700,flexShrink:0,boxShadow:cur?`0 0 18px ${stage.color}55`:"none",transition:"all 0.3s"}}>
-                {done?"✓":i+1}
-              </div>
-              {i<stages.length-1 && <div style={{width:2,flex:1,minHeight:20,background:done?stage.color:C.bg3,borderRadius:1,margin:"6px 0",transition:"background 0.4s"}}/>}
+          <div key={stage.id} style={{display:"flex",gap:14,opacity:pending?0.35:1,transition:"opacity 0.4s"}}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",width:38,flexShrink:0}}>
+              <div style={{
+                width:38,height:38,borderRadius:12,flexShrink:0,
+                background:cur?stage.color:done?`${stage.color}18`:"rgba(255,255,255,0.04)",
+                border:`0.5px solid ${done||cur?stage.color:C.border}`,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:13,fontWeight:700,
+                color:cur?"#000":done?stage.color:C.t4,
+                boxShadow:cur?`0 4px 18px ${stage.color}55`:"none",
+                transition:"all 0.4s",
+              }}>{done?"✓":i+1}</div>
+              {i<stages.length-1 && <div style={{width:1,flex:1,minHeight:18,background:done?stage.color:"rgba(255,255,255,0.07)",margin:"5px 0",borderRadius:1}}/>}
             </div>
-            <div style={{flex:1,paddingBottom:i<stages.length-1?20:0,paddingTop:4}}>
-              <div style={{padding:cur?"14px 16px":"2px 0",background:cur?`${stage.color}10`:"transparent",border:cur?`1px solid ${stage.color}30`:"1px solid transparent",borderRadius:cur?14:0,transition:"all 0.3s"}}>
-                <div style={{fontSize:16,fontWeight:600,color:cur?stage.color:done?C.t1:C.t3,marginBottom:3,display:"flex",alignItems:"center",gap:10}}>
-                  {stage.label}
-                  {cur && <Pill label="NOW" color={stage.color}/>}
+            <div style={{flex:1,paddingBottom:i<stages.length-1?18:0,paddingTop:7}}>
+              <div style={{
+                background:cur?`${stage.color}09`:"transparent",
+                border:cur?`0.5px solid ${stage.color}22`:"0.5px solid transparent",
+                borderRadius:15,padding:cur?"15px":"0 0 2px",transition:"all 0.4s",
+              }}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                  <span style={{fontSize:14,fontWeight:600,color:cur?stage.color:done?C.t1:C.t3}}>{stage.label}</span>
+                  {cur && <Pill label="NOW" color={stage.color} small/>}
                 </div>
-                <div style={{fontSize:13,color:C.t2}}>{history?.[stage.id]?fmt(history[stage.id]):stage.sub}</div>
+                <div style={{fontSize:11,color:C.t4}}>{history?.[stage.id]?fmt(history[stage.id]):stage.sub}</div>
                 {children?.(stage,i,cur,done)}
               </div>
             </div>
@@ -383,42 +407,47 @@ function Pipeline({stages,currentIndex,history,children}) {
 }
 
 // ─── Hero Card ────────────────────────────────────────────────────────────────
-function HeroCard({type,ticket,stage,stages,geo,onClear}) {
-  const s=stages.find(x=>x.id===stage);
-  const truck=type==="truck";
+function HeroCard({type,ticket,currentStage,stages,geo,onClear}) {
+  const stage=stages.find(s=>s.id===currentStage);
+  const isTruck=type==="truck";
   return (
-    <div style={{borderRadius:20,background:`linear-gradient(145deg,${C.bg1} 0%,#0A0A0A 100%)`,border:`1px solid ${s?.color}30`,padding:"20px",position:"relative",overflow:"hidden",marginBottom:8}}>
-      <div style={{position:"absolute",top:-50,right:-50,width:160,height:160,borderRadius:"50%",background:`${s?.color}12`,filter:"blur(40px)",pointerEvents:"none"}}/>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16,position:"relative"}}>
-        <div>
-          <div style={{fontSize:12,color:C.t2,letterSpacing:"0.1em",fontWeight:600,marginBottom:6}}>{truck?"🚛 ACTIVE TRUCK":"🧪 ACTIVE SAMPLE"}</div>
-          <div style={{fontSize:26,fontWeight:700,letterSpacing:"-0.03em",lineHeight:1}}>{ticket?.ticketNo||"—"}</div>
-          <div style={{fontSize:15,color:C.t2,marginTop:6}}>{truck?`${ticket?.immatriculation||"—"} · ${ticket?.fournisseur||"—"}`:`${ticket?.supplier||"—"} · ${ticket?.mineReference||"—"}`}</div>
+    <Card accent={stage?.color} style={{marginBottom:18,position:"relative",overflow:"hidden"}}>
+      <div style={{position:"absolute",top:-50,right:-50,width:160,height:160,borderRadius:"50%",background:`${stage?.color}12`,filter:"blur(40px)",pointerEvents:"none"}}/>
+      <div style={{padding:"18px 18px 14px",position:"relative"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:600,marginBottom:5}}>
+              {isTruck?"🚛 Active Transport":"🧪 Active Sample"}
+            </div>
+            <div style={{fontSize:24,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",lineHeight:1.1,marginBottom:4}}>
+              {ticket?.ticketNo||"—"}
+            </div>
+            <div style={{fontSize:13,color:C.t2}}>
+              {isTruck?`${ticket?.immatriculation||"—"}  ·  ${ticket?.fournisseur||"—"}`:`${ticket?.supplier||"—"}  ·  ${ticket?.mineReference||"—"}`}
+            </div>
+          </div>
+          <button className="tapSm" onClick={onClear} style={{background:"rgba(255,69,58,0.10)",border:"0.5px solid rgba(255,69,58,0.25)",borderRadius:9,padding:"6px 11px",fontSize:12,color:C.red,fontWeight:600,flexShrink:0}}>Clear</button>
         </div>
-        <button onClick={onClear} style={{background:C.bg3,border:"none",borderRadius:8,color:C.t2,padding:"8px 12px",fontSize:13,fontWeight:600,fontFamily:"inherit"}}>Clear</button>
+        <div style={{display:"inline-flex",alignItems:"center",gap:7,background:`${stage?.color}12`,border:`0.5px solid ${stage?.color}30`,borderRadius:11,padding:"8px 13px"}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:stage?.color,animation:"pulse 2s infinite"}}/>
+          <span style={{fontSize:13,color:stage?.color,fontWeight:600}}>{stage?.label}</span>
+        </div>
+        {isTruck && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:12}}>
+            {[["poidsBrut","Brut"],["poidsTare","Tare"],["poidsNet","Net"]].map(([k,l])=>{
+              const val=ticket?.[k],has=val&&val!=="TBD";
+              return (
+                <div key={k} style={{background:"rgba(255,255,255,0.04)",borderRadius:11,padding:"9px 11px",border:`0.5px solid ${has?`${C.green}28`:C.border}`}}>
+                  <div style={{fontSize:9,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:3}}>{l}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:has?C.green:C.t4}}>{val||"TBD"}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-      <Pill label={s?.label} color={s?.color}/>
-      {truck && (
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:16}}>
-          {[["poidsBrut","Brut"],["poidsTare","Tare"],["poidsNet","Net"]].map(([k,l])=>{
-            const v=ticket?.[k],ok=v&&v!=="TBD";
-            return <div key={k} style={{background:C.bg2,borderRadius:12,padding:"12px"}}><div style={{fontSize:11,color:C.t3,letterSpacing:"0.08em",marginBottom:6}}>{l.toUpperCase()}</div><div style={{fontSize:18,fontWeight:700,color:ok?C.green:C.bg3}}>{v||"—"}</div></div>;
-          })}
-        </div>
-      )}
-      {geo && <MapEmbed lat={geo.lat} lng={geo.lng}/>}
-    </div>
-  );
-}
-
-// ─── Toast ────────────────────────────────────────────────────────────────────
-function Toast({msg,onClose}) {
-  if(!msg) return null;
-  return (
-    <div style={{position:"fixed",bottom:90,left:16,right:16,zIndex:9999,background:"rgba(28,28,30,0.96)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:16,padding:"14px 18px",display:"flex",alignItems:"center",gap:12,boxShadow:"0 8px 32px rgba(0,0,0,0.6)",animation:"slideUp 0.3s cubic-bezier(0.34,1.2,0.64,1)"}}>
-      <span style={{flex:1,fontSize:14,color:C.t1,lineHeight:1.5,letterSpacing:"-0.01em"}}>{msg}</span>
-      <button onClick={onClose} style={{background:"none",border:"none",color:C.t3,fontSize:20,padding:4,lineHeight:1}}>×</button>
-    </div>
+      {geo && <div style={{padding:"0 18px 16px"}}><MapEmbed lat={geo.lat} lng={geo.lng}/></div>}
+    </Card>
   );
 }
 
@@ -428,71 +457,85 @@ function SampleModule({notify,addLog}) {
   const [loading,setLoading] = useState(true);
   const [manual,setManual]   = useState(false);
   const [form,setForm]       = useState({});
-  const lastRef=useRef(null), pollRef=useRef(null);
+  const lastS=useRef(null); const poll=useRef(null);
+  const SF=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
 
-  async function load(notif=true) {
-    try {
-      const r=await window.storage.get(SAMPLE_KEY);
-      if(r){const d=JSON.parse(r.value);setData(d);
-        if(notif&&lastRef.current!==null&&lastRef.current!==d.currentStage){const s=SAMPLE_STAGES.find(x=>x.id===d.currentStage);notify(`🧪 ${d.ticket?.ticketNo||""} → ${s?.label}`);}
-        lastRef.current=d.currentStage;
-      } else setData(null);
-    } catch{setData(null);}
+  async function load(n=true){
+    try{const r=await window.storage.get(SAMPLE_KEY);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=SAMPLE_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🧪 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
     setLoading(false);
   }
-  useEffect(()=>{load(false);pollRef.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(pollRef.current);},[]);
+  useEffect(()=>{load(false);poll.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(poll.current);},[]);
 
-  const makeLabel=t=>`SAMPLE: ${t.ticketNo||"—"} / ${t.supplier||"—"} / ${t.mineReference||"—"} / ${t.tonnage||"TBD"}`;
+  const lbl=t=>`SAMPLE · ${t.ticketNo||"—"} · ${t.supplier||"—"} · ${t.mineReference||"—"} · ${t.tonnage||"TBD"}`;
 
-  async function register(raw) {
-    const{_scanned,_geo,...ticket}=raw;
-    const geo=_geo||null;
+  async function register(sc){
+    const{_scanned,_geo,...ticket}=sc; const geo=_geo||null;
     const entry={ticket,currentStage:"collected",history:{collected:new Date().toISOString()},geo};
     await window.storage.set(SAMPLE_KEY,JSON.stringify(entry));
-    addLog({id:`S-${Date.now()}`,type:"sample",label:makeLabel(ticket),ticket,stageHistory:[{stage:"collected",label:"Collected",ts:new Date().toISOString()}],geo});
-    setData(entry);lastRef.current="collected";setForm({});setManual(false);
-    notify(`✓ ${makeLabel(ticket)}`);
+    addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(ticket),ticket,stageHistory:[{stage:"collected",label:"Collected",ts:new Date().toISOString()}],geo});
+    setData(entry);lastS.current="collected";setForm({});setManual(false);
+    notify(`✓ Sample registered: ${ticket.ticketNo||ticket.supplier||"—"}`);
   }
 
-  async function advance(stageId,updatedTicket=null) {
-    const stage=SAMPLE_STAGES.find(s=>s.id===stageId);
-    const t=updatedTicket||data.ticket;
-    const updated={...data,ticket:t,currentStage:stageId,history:{...data.history,[stageId]:new Date().toISOString()}};
+  async function advance(stageId,updT=null){
+    const stage=SAMPLE_STAGES.find(s=>s.id===stageId),newT=updT||data.ticket;
+    const updated={...data,ticket:newT,currentStage:stageId,history:{...data.history,[stageId]:new Date().toISOString()}};
     await window.storage.set(SAMPLE_KEY,JSON.stringify(updated));
-    addLog({id:`S-${Date.now()}`,type:"sample",label:makeLabel(t),ticket:t,stageHistory:[{stage:stageId,label:stage.label,ts:new Date().toISOString()}],geo:data.geo||null});
-    setData(updated);lastRef.current=stageId;notify(`🧪 ${t.ticketNo||""} → ${stage.label}`);
+    addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(newT),ticket:newT,stageHistory:[{stage:stageId,label:stage.label,ts:new Date().toISOString()}],geo:data.geo||null});
+    setData(updated);lastS.current=stageId;notify(`🧪 ${newT.ticketNo||"—"} → ${stage.label}`);
   }
 
-  async function clear(){await window.storage.delete(SAMPLE_KEY);setData(null);lastRef.current=null;}
-
+  async function clear(){await window.storage.delete(SAMPLE_KEY);setData(null);lastS.current=null;}
   const ci=data?SAMPLE_STAGES.findIndex(s=>s.id===data.currentStage):-1;
-  const SFIELDS=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
 
-  if(loading) return <div style={{padding:"60px",textAlign:"center"}}><Spinner size={28} color={C.t3}/></div>;
+  if(loading) return <div style={{padding:"20px 0"}}>{[1,2,3].map(i=><div key={i} className="skeleton" style={{height:56,marginBottom:10}}/>)}</div>;
 
   return (
-    <div style={{padding:"8px 16px 40px"}} className="fade">
-      {!data && (!manual
-        ? <ScanPanel context="sample" onScanned={register} onManual={()=>setManual(true)}/>
-        : <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <span style={{fontSize:17,fontWeight:600}}>Manual Entry</span>
-              <button onClick={()=>setManual(false)} style={{background:"none",border:"none",color:C.blue,fontSize:15,fontFamily:"inherit"}}>← Scan</button>
-            </div>
-            <Card>{SFIELDS.map(([k,l],i)=>(<div key={k} style={{padding:"10px 16px",borderBottom:i<SFIELDS.length-1?`1px solid ${C.sep}`:"none"}}><div style={{fontSize:12,color:C.t2,marginBottom:5}}>{l}</div><input className="ios-input" value={form[k]||""} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={l}/></div>))}</Card>
-            <div style={{height:12}}/>
-            <PrimaryBtn label="Register Sample" onPress={()=>register(form)} disabled={!form.ticketNo} color={C.orange} icon="🧪"/>
-          </div>
-      )}
-      {data && (
-        <div>
-          <HeroCard type="sample" ticket={data.ticket} stage={data.currentStage} stages={SAMPLE_STAGES} geo={data.geo} onClear={clear}/>
-          <div style={{height:16}}/>
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      {!data ? (
+        !manual
+          ? <ScanPanel context="sample" onScanned={register} onManual={()=>setManual(true)}/>
+          : (
+            <Card style={{overflow:"visible"}}>
+              <div style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:15,fontWeight:600,color:C.t1}}>Manual Entry</div>
+                <button onClick={()=>setManual(false)} style={{background:"rgba(255,255,255,0.05)",border:`0.5px solid ${C.border}`,borderRadius:9,padding:"6px 11px",fontSize:11,color:C.t2,fontWeight:600}}>← Scan</button>
+              </div>
+              <Divider/>
+              <div style={{padding:"14px 18px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 12px"}}>
+                {SF.map(([k,l])=>(<Field key={k} label={l} value={form[k]||""} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={l}/>))}
+              </div>
+              <div style={{padding:"4px 18px 18px"}}>
+                <button onClick={()=>register(form)} disabled={!form.ticketNo} className="tap" style={{
+                  width:"100%",background:form.ticketNo?`linear-gradient(145deg,${C.accent},#E8890A)`:"rgba(255,255,255,0.04)",
+                  border:"none",borderRadius:14,padding:"16px",color:form.ticketNo?"#000":C.t4,fontWeight:700,fontSize:15,
+                  boxShadow:form.ticketNo?`0 6px 20px ${C.accent}40`:"none",transition:"all 0.2s",
+                }}>Register Sample</button>
+              </div>
+            </Card>
+          )
+      ) : (
+        <>
+          <HeroCard type="sample" ticket={data.ticket} currentStage={data.currentStage} stages={SAMPLE_STAGES} geo={data.geo} onClear={clear}/>
           <Pipeline stages={SAMPLE_STAGES} currentIndex={ci} history={data.history}>
-            {(stage,i,isCurrent)=>(<div>{i===ci+1&&<div style={{marginTop:14}}><ScanPanel context="sample" onScanned={s=>advance(stage.id,{...data.ticket,...s})}/></div>}</div>)}
+            {(stage,i,isCur)=>(
+              <div>
+                {i===ci+1 && (
+                  <div style={{marginTop:12,animation:"fadeIn 0.3s ease"}}>
+                    <ScanPanel context="sample" onScanned={sc=>advance(stage.id,{...data.ticket,...sc})}/>
+                  </div>
+                )}
+              </div>
+            )}
           </Pipeline>
-          {ci===SAMPLE_STAGES.length-1&&<div style={{textAlign:"center",padding:"40px 16px"}} className="fade"><div style={{fontSize:40,marginBottom:12,opacity:0.5}}>✦</div><div style={{fontSize:18,fontWeight:600,color:C.purple}}>All stages complete</div><div style={{fontSize:14,color:C.t2,marginTop:6}}>Sample has reached the lab</div></div>}
-        </div>
+          {ci===SAMPLE_STAGES.length-1 && (
+            <Card accent={C.purple} style={{marginTop:16,padding:"28px 22px",textAlign:"center",animation:"scaleIn 0.35s ease"}}>
+              <div style={{fontSize:34,marginBottom:10}}>🔬</div>
+              <div style={{fontSize:17,color:C.purple,fontWeight:700,letterSpacing:"-0.02em"}}>All stages complete</div>
+              <div style={{fontSize:12,color:C.t4,marginTop:5}}>Sample is at the laboratory</div>
+            </Card>
+          )}
+        </>
       )}
     </div>
   );
@@ -504,70 +547,96 @@ function TruckModule({notify,addLog}) {
   const [loading,setLoading] = useState(true);
   const [manual,setManual]   = useState(false);
   const [form,setForm]       = useState({});
-  const lastRef=useRef(null), pollRef=useRef(null);
+  const lastS=useRef(null); const poll=useRef(null);
+  const TF=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité produit"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
 
-  async function load(notif=true) {
-    try {
-      const r=await window.storage.get(TRUCK_KEY);
-      if(r){const d=JSON.parse(r.value);setData(d);
-        if(notif&&lastRef.current!==null&&lastRef.current!==d.currentStage){const s=TRUCK_STAGES.find(x=>x.id===d.currentStage);notify(`🚛 ${d.ticket?.ticketNo||""} → ${s?.label}`);}
-        lastRef.current=d.currentStage;
-      } else setData(null);
-    } catch{setData(null);}
+  async function load(n=true){
+    try{const r=await window.storage.get(TRUCK_KEY);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=TRUCK_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🚛 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
     setLoading(false);
   }
-  useEffect(()=>{load(false);pollRef.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(pollRef.current);},[]);
+  useEffect(()=>{load(false);poll.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(poll.current);},[]);
 
-  const makeLabel=t=>{const ton=t.poidsNet&&t.poidsNet!=="TBD"?t.poidsNet:t.poidsBrut&&t.poidsBrut!=="TBD"?"~"+t.poidsBrut:"TBD";return`TRUCK: ${t.ticketNo||"—"} / ${t.immatriculation||"—"} / ${t.fournisseur||"—"} / ${ton}`;};
+  const lbl=t=>{const ton=t.poidsNet&&t.poidsNet!=="TBD"?t.poidsNet:t.poidsBrut&&t.poidsBrut!=="TBD"?"~"+t.poidsBrut:"TBD";return`TRUCK · ${t.ticketNo||"—"} · ${t.immatriculation||"—"} · ${t.fournisseur||"—"} · ${ton}`;};
 
-  async function registerLoaded(ticket) {
+  async function registerLoaded(ticket){
     const t={poidsBrut:"TBD",poidsTare:"TBD",poidsNet:"TBD",...ticket};
     const entry={ticket:t,currentStage:"loaded",history:{loaded:new Date().toISOString()}};
     await window.storage.set(TRUCK_KEY,JSON.stringify(entry));
-    addLog({id:`T-${Date.now()}`,type:"truck",label:makeLabel(t),ticket:t,stageHistory:[{stage:"loaded",label:"Truck Loaded",ts:new Date().toISOString()}]});
-    setData(entry);lastRef.current="loaded";setForm({});setManual(false);notify(`✓ ${makeLabel(t)}`);
+    addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(t),ticket:t,stageHistory:[{stage:"loaded",label:"Truck Loaded",ts:new Date().toISOString()}]});
+    setData(entry);lastS.current="loaded";setForm({});setManual(false);
+    notify(`✓ Truck logged: ${t.ticketNo||t.immatriculation||"—"}`);
   }
 
-  async function logUnloaded(scanned) {
-    const merged={...data.ticket,...scanned};
+  async function logUnloaded(sc){
+    const merged={...data.ticket,...sc};
     const updated={...data,ticket:merged,currentStage:"unloaded",history:{...data.history,unloaded:new Date().toISOString()}};
     await window.storage.set(TRUCK_KEY,JSON.stringify(updated));
-    addLog({id:`T-${Date.now()}`,type:"truck",label:makeLabel(merged),ticket:merged,stageHistory:[{stage:"unloaded",label:"Truck Unloaded",ts:new Date().toISOString()}]});
-    setData(updated);lastRef.current="unloaded";notify(`🚛 ${makeLabel(merged)} → Unloaded`);
+    addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(merged),ticket:merged,stageHistory:[{stage:"unloaded",label:"Truck Unloaded",ts:new Date().toISOString()}]});
+    setData(updated);lastS.current="unloaded";
+    notify(`🚛 ${merged.ticketNo||"—"} → Truck Unloaded · Net: ${merged.poidsNet||"—"}`);
   }
 
-  async function clear(){await window.storage.delete(TRUCK_KEY);setData(null);lastRef.current=null;}
-
+  async function clear(){await window.storage.delete(TRUCK_KEY);setData(null);lastS.current=null;}
   const ci=data?TRUCK_STAGES.findIndex(s=>s.id===data.currentStage):-1;
-  const TFIELDS=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
+  const t=data?.ticket||{};
 
-  if(loading) return <div style={{padding:"60px",textAlign:"center"}}><Spinner size={28} color={C.t3}/></div>;
+  if(loading) return <div style={{padding:"20px 0"}}>{[1,2,3].map(i=><div key={i} className="skeleton" style={{height:56,marginBottom:10}}/>)}</div>;
 
   return (
-    <div style={{padding:"8px 16px 40px"}} className="fade">
-      {!data && <div>
-        <Card style={{marginBottom:16}}><div style={{padding:"16px"}}><div style={{fontSize:16,fontWeight:600,marginBottom:4}}>Bon de Transport</div><div style={{fontSize:14,color:C.t2,lineHeight:1.6}}>Scan the ticket at the mine. Weights will be logged at Agadir.</div></div></Card>
-        {!manual
-          ? <ScanPanel context="truck" onScanned={registerLoaded} onManual={()=>setManual(true)}/>
-          : <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                <span style={{fontSize:17,fontWeight:600}}>Manual Entry</span>
-                <button onClick={()=>setManual(false)} style={{background:"none",border:"none",color:C.blue,fontSize:15,fontFamily:"inherit"}}>← Scan</button>
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      {!data ? (
+        <>
+          <Card style={{marginBottom:14,padding:"14px 18px"}}>
+            <div style={{fontSize:13,color:C.accent,fontWeight:600,marginBottom:3}}>Bon de Transport — Loaded</div>
+            <div style={{fontSize:12,color:C.t4,lineHeight:1.6}}>Scan at mine. Weights logged later by stock manager in Agadir.</div>
+          </Card>
+          {!manual
+            ? <ScanPanel context="truck" onScanned={registerLoaded} onManual={()=>setManual(true)}/>
+            : (
+              <Card style={{overflow:"visible"}}>
+                <div style={{padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontSize:15,fontWeight:600,color:C.t1}}>Manual Entry</div>
+                  <button onClick={()=>setManual(false)} style={{background:"rgba(255,255,255,0.05)",border:`0.5px solid ${C.border}`,borderRadius:9,padding:"6px 11px",fontSize:11,color:C.t2,fontWeight:600}}>← Scan</button>
+                </div>
+                <Divider/>
+                <div style={{padding:"14px 18px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"12px 12px"}}>
+                  {TF.map(([k,l])=>(<Field key={k} label={l} value={form[k]||""} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={l}/>))}
+                </div>
+                <div style={{padding:"4px 18px 18px"}}>
+                  <button onClick={()=>registerLoaded(form)} disabled={!form.ticketNo} className="tap" style={{
+                    width:"100%",background:form.ticketNo?`linear-gradient(145deg,${C.accent},#E8890A)`:"rgba(255,255,255,0.04)",
+                    border:"none",borderRadius:14,padding:"16px",color:form.ticketNo?"#000":C.t4,fontWeight:700,fontSize:15,
+                    boxShadow:form.ticketNo?`0 6px 20px ${C.accent}40`:"none",transition:"all 0.2s",
+                  }}>Log Truck Loaded</button>
+                </div>
+              </Card>
+            )
+          }
+        </>
+      ) : (
+        <>
+          <HeroCard type="truck" ticket={t} currentStage={data.currentStage} stages={TRUCK_STAGES} geo={null} onClear={clear}/>
+          <Pipeline stages={TRUCK_STAGES} currentIndex={ci} history={data.history}>
+            {(stage,i,isCur)=>(
+              <div>
+                {stage.id==="unloaded"&&isCur && (
+                  <div style={{marginTop:12,animation:"fadeUp 0.3s ease"}}>
+                    <div style={{fontSize:10,color:C.accent,fontWeight:700,marginBottom:8,letterSpacing:"0.07em",textTransform:"uppercase"}}>Scan ticket — Claude reads weights</div>
+                    <ScanPanel context="truck" onScanned={logUnloaded} existingData={data.ticket}/>
+                  </div>
+                )}
               </div>
-              <Card>{TFIELDS.map(([k,l],i)=>(<div key={k} style={{padding:"10px 16px",borderBottom:i<TFIELDS.length-1?`1px solid ${C.sep}`:"none"}}><div style={{fontSize:12,color:C.t2,marginBottom:5}}>{l}</div><input className="ios-input" value={form[k]||""} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={l}/></div>))}</Card>
-              <div style={{height:12}}/>
-              <PrimaryBtn label="Log Truck Loaded" onPress={()=>registerLoaded(form)} disabled={!form.ticketNo} color={C.orange} icon="🚛"/>
-            </div>
-        }
-      </div>}
-      {data && <div>
-        <HeroCard type="truck" ticket={data.ticket} stage={data.currentStage} stages={TRUCK_STAGES} geo={null} onClear={clear}/>
-        <div style={{height:16}}/>
-        <Pipeline stages={TRUCK_STAGES} currentIndex={ci} history={data.history}>
-          {(stage,i,isCurrent)=>(<div>{stage.id==="unloaded"&&isCurrent&&<div style={{marginTop:14}}><div style={{fontSize:13,color:C.t2,marginBottom:12}}>Scan ticket — Claude reads weights automatically</div><ScanPanel context="truck" onScanned={logUnloaded} existingData={data.ticket}/></div>}</div>)}
-        </Pipeline>
-        {ci===TRUCK_STAGES.length-1&&<div style={{textAlign:"center",padding:"40px 16px"}} className="fade"><div style={{fontSize:40,marginBottom:12,opacity:0.5}}>✦</div><div style={{fontSize:18,fontWeight:600,color:C.green}}>Cycle complete</div><div style={{fontSize:14,color:C.t2,marginTop:6}}>Net: {data.ticket?.poidsNet||"—"}</div></div>}
-      </div>}
+            )}
+          </Pipeline>
+          {ci===TRUCK_STAGES.length-1 && (
+            <Card accent={C.green} style={{marginTop:16,padding:"28px 22px",textAlign:"center",animation:"scaleIn 0.35s ease"}}>
+              <div style={{fontSize:34,marginBottom:10}}>✅</div>
+              <div style={{fontSize:17,color:C.green,fontWeight:700,letterSpacing:"-0.02em"}}>Truck cycle complete</div>
+              <div style={{fontSize:12,color:C.t4,marginTop:5}}>Net: {t.poidsNet||"—"}</div>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -575,62 +644,82 @@ function TruckModule({notify,addLog}) {
 // ─── Log Module ───────────────────────────────────────────────────────────────
 function LogModule({entries}) {
   const [expanded,setExpanded] = useState({});
+  const toggle = id=>setExpanded(p=>({...p,[id]:!p[id]}));
+
   if(!entries.length) return (
-    <div style={{padding:"80px 16px",textAlign:"center"}} className="fade">
-      <div style={{fontSize:48,marginBottom:16,opacity:0.2}}>📋</div>
-      <div style={{fontSize:17,fontWeight:600,color:C.t2}}>No entries yet</div>
-      <div style={{fontSize:14,color:C.t3,marginTop:6}}>Logged samples and trucks appear here</div>
+    <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.4s ease"}}>
+      <div style={{fontSize:44,marginBottom:14,opacity:0.25}}>📋</div>
+      <div style={{fontSize:16,color:C.t2,fontWeight:600,marginBottom:6}}>No entries yet</div>
+      <div style={{fontSize:13,color:C.t4,lineHeight:1.6}}>Logged samples and trucks appear here</div>
     </div>
   );
+
   return (
-    <div style={{padding:"8px 16px 40px"}} className="fade">
-      <div style={{fontSize:13,color:C.t3,letterSpacing:"0.06em",fontWeight:600,padding:"4px 0 12px"}}>{entries.length} ENTRIES</div>
-      {entries.map((entry)=>{
-        const truck=entry.type==="truck", color=truck?C.green:C.orange;
+    <div style={{animation:"fadeUp 0.3s ease"}}>
+      <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",fontWeight:700,marginBottom:14,textTransform:"uppercase"}}>
+        {entries.length} {entries.length===1?"Entry":"Entries"} — Newest first
+      </div>
+      {entries.map((entry,idx)=>{
+        const isTruck=entry.type==="truck",color=isTruck?C.green:C.accent;
         const last=entry.stageHistory?.[entry.stageHistory.length-1];
-        const t=entry.ticket||{}, open=expanded[entry.id];
+        const et=entry.ticket||{},open=expanded[entry.id];
         return (
-          <Card key={entry.id} style={{marginBottom:8}}>
-            <div onClick={()=>setExpanded(p=>({...p,[entry.id]:!p[entry.id]}))} style={{padding:"14px 16px",cursor:"pointer"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                <div style={{width:32,height:32,borderRadius:10,background:`${color}20`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{truck?"🚛":"🧪"}</div>
-                <Pill label={truck?"TRUCK":"SAMPLE"} color={color}/>
-                {entry.geo&&<span style={{fontSize:13}}>📍</span>}
-                {entry.ticket?._photoUrl&&<span style={{fontSize:13}}>📸</span>}
-                <span style={{marginLeft:"auto",color:C.t3,fontSize:12}}>{open?"▲":"▼"}</span>
+          <Card key={entry.id} style={{marginBottom:9,overflow:"hidden",animation:`fadeUp 0.3s ease ${Math.min(idx,6)*0.04}s both`}}>
+            <div className="tap" onClick={()=>toggle(entry.id)} style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:40,height:40,borderRadius:12,flexShrink:0,background:`${color}13`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+                {isTruck?"🚛":"🧪"}
               </div>
-              <div style={{fontSize:15,fontWeight:600,letterSpacing:"-0.01em",marginBottom:4}}>{truck?`${t.ticketNo||"—"} · ${t.immatriculation||"—"}`:`${t.ticketNo||"—"} · ${t.supplier||"—"}`}</div>
-              {last&&<div style={{fontSize:13,color:C.t2}}>{last.label} · {fmt(last.ts)}</div>}
-            </div>
-            {open&&(
-              <div style={{borderTop:`1px solid ${C.sep}`}} className="fade">
-                {entry.stageHistory?.length>0&&(
-                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.sep}`}}>
-                    <div style={{fontSize:12,color:C.t3,letterSpacing:"0.06em",fontWeight:600,marginBottom:10}}>STAGE HISTORY</div>
-                    {entry.stageHistory.map((sh,i)=>(
-                      <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0}}/>
-                        <span style={{fontSize:14,color:C.t1,flex:1}}>{sh.label}</span>
-                        <span style={{fontSize:13,color:C.t2,fontVariantNumeric:"tabular-nums"}}>{fmt(sh.ts)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{padding:"14px 0"}}>
-                  <div style={{fontSize:12,color:C.t3,letterSpacing:"0.06em",fontWeight:600,padding:"0 16px",marginBottom:8}}>TICKET DATA</div>
-                  {Object.entries(t).filter(([k,v])=>v&&v!=="TBD"&&!k.startsWith("_")).map(([k,v],i,arr)=>{
-                    const isW=["poidsBrut","poidsTare","poidsNet","tonnage"].includes(k);
-                    return <Row key={k} label={k.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase())} value={v} color={isW?C.green:undefined} last={i===arr.length-1}/>;
-                  })}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                  <Pill label={isTruck?"TRUCK":"SAMPLE"} color={color} small/>
+                  {entry.geo && <span style={{fontSize:11}}>📍</span>}
                 </div>
-                {t._photoUrl&&(
-                  <div style={{padding:"0 16px 14px"}}>
-                    <div style={{fontSize:12,color:C.t3,letterSpacing:"0.06em",fontWeight:600,marginBottom:8}}>PHOTO</div>
-                    <div style={{borderRadius:12,overflow:"hidden"}}><img src={t._photoUrl} alt="ticket" style={{width:"100%",maxHeight:180,objectFit:"cover",display:"block"}}/></div>
-                    <a href={t._photoUrl} target="_blank" rel="noreferrer" style={{display:"block",textAlign:"center",color:C.blue,fontSize:14,marginTop:8,textDecoration:"none"}}>View full size ↗</a>
+                <div style={{fontSize:13,color:C.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {isTruck?`${et.ticketNo||"—"}  ·  ${et.immatriculation||"—"}  ·  ${et.fournisseur||"—"}`:`${et.ticketNo||"—"}  ·  ${et.supplier||"—"}`}
+                </div>
+                {last && <div style={{fontSize:11,color:C.t4,marginTop:2}}>{last.label} · {fmt(last.ts)}</div>}
+              </div>
+              <div style={{color:C.t4,fontSize:14,flexShrink:0,transition:"transform 0.2s",transform:open?"rotate(180deg)":"none"}}>▼</div>
+            </div>
+            {open && (
+              <div style={{borderTop:`0.5px solid ${C.border}`,background:"rgba(255,255,255,0.015)",animation:"slideDown 0.2s ease"}}>
+                <div style={{padding:"14px 16px"}}>
+                  <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Stage History</div>
+                  {entry.stageHistory?.map((sh,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:color,flexShrink:0}}/>
+                      <span style={{fontSize:12,color:C.t1,flex:1,fontWeight:500}}>{sh.label}</span>
+                      <span style={{fontSize:11,color:C.t4}}>{fmt(sh.ts)}</span>
+                    </div>
+                  ))}
+                </div>
+                <Divider/>
+                <div style={{padding:"12px 16px"}}>
+                  <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,marginBottom:10}}>Ticket Data</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 18px"}}>
+                    {Object.entries(et).filter(([k,v])=>v&&v!=="TBD"&&!k.startsWith("_")).map(([k,v])=>{
+                      const isW=["poidsBrut","poidsTare","poidsNet","tonnage"].includes(k);
+                      return (
+                        <div key={k}>
+                          <div style={{fontSize:9,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:2}}>{k.replace(/([A-Z])/g," $1").trim()}</div>
+                          <div style={{fontSize:13,color:isW?C.green:C.t1,fontWeight:isW?700:400}}>{v}</div>
+                        </div>
+                      );
+                    })}
                   </div>
+                </div>
+                {et._photoUrl && (
+                  <>
+                    <Divider/>
+                    <div style={{padding:"12px 16px"}}>
+                      <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Photo</div>
+                      <a href={et._photoUrl} target="_blank" rel="noreferrer">
+                        <img src={et._photoUrl} alt="ticket" style={{width:"100%",borderRadius:11,display:"block",maxHeight:180,objectFit:"cover"}}/>
+                      </a>
+                    </div>
+                  </>
                 )}
-                {entry.geo&&<div style={{padding:"0 16px 14px"}}><MapEmbed lat={entry.geo.lat} lng={entry.geo.lng}/></div>}
+                {entry.geo && <div style={{padding:"0 16px 14px"}}><MapEmbed lat={entry.geo.lat} lng={entry.geo.lng}/></div>}
               </div>
             )}
           </Card>
@@ -640,88 +729,112 @@ function LogModule({entries}) {
   );
 }
 
-// ─── Root ─────────────────────────────────────────────────────────────────────
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [tab,setTab]     = useState(null);
-  const [toast,setToast] = useState(null);
-  const [log,setLog]     = useState([]);
-  const toastRef=useRef(null), pollRef=useRef(null);
+  const [mode,setMode]     = useState(null);
+  const [toast,setToast]   = useState(null);
+  const [log,setLog]       = useState([]);
+  const toastRef=useRef(null); const pollRef=useRef(null);
 
   function notify(msg){setToast(msg);clearTimeout(toastRef.current);toastRef.current=setTimeout(()=>setToast(null),5000);}
   async function loadLog(){try{const r=await window.storage.get(LOG_KEY);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
-  async function addLog(e){const u=[e,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
+  async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
 
   const TABS=[
-    {id:"sample",icon:"🧪",label:"Sample",color:C.orange},
-    {id:"truck", icon:"🚛",label:"Truck", color:C.green},
-    {id:"log",   icon:"📋",label:"Log",   color:C.blue, badge:log.length},
+    {id:"sample",icon:"🧪",label:"Sample",color:C.accent},
+    {id:"truck", icon:"🚛",label:"Truck",  color:C.green},
+    {id:"log",   icon:"📋",label:"Log",    color:C.blue,badge:log.length},
   ];
 
   return (
-    <div style={{minHeight:"100vh",background:C.bg0,color:C.t1}}>
-      <GlobalStyle/>
+    <div style={{minHeight:"100vh",background:C.bg0,color:C.t1,
+      fontFamily:"-apple-system,'SF Pro Display','SF Pro Text',BlinkMacSystemFont,'Helvetica Neue',sans-serif",
+    }}>
+      <style>{GLOBAL_CSS}</style>
       <Toast msg={toast} onClose={()=>setToast(null)}/>
 
-      {/* HEADER */}
-      <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)",borderBottom:`1px solid ${C.sep}`}}>
-        <div style={{maxWidth:600,margin:"0 auto",padding:"14px 16px 0"}}>
-          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-            <div style={{height:40,borderRadius:12,background:`${C.orange}15`,border:`1px solid ${C.orange}25`,display:"flex",alignItems:"center",padding:"4px 10px"}}>
-              <img src="/logo.png" alt="BPI" style={{height:28,width:"auto"}}/>
+      {/* Ambient top glow */}
+      <div style={{position:"fixed",inset:0,pointerEvents:"none",zIndex:0,
+        background:"radial-gradient(ellipse 80% 40% at 50% -15%, rgba(255,159,10,0.06) 0%, transparent 60%)",
+      }}/>
+
+      <div style={{position:"relative",zIndex:1,maxWidth:640,margin:"0 auto",paddingBottom:50}}>
+
+        {/* ── HEADER ──────────────────────────────────────────── */}
+        <div style={{
+          position:"sticky",top:0,zIndex:100,
+          background:"rgba(0,0,0,0.85)",
+          backdropFilter:"blur(28px) saturate(1.6)",
+          WebkitBackdropFilter:"blur(28px) saturate(1.6)",
+          borderBottom:`0.5px solid ${C.border}`,
+          padding:"13px 18px 11px",
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:13}}>
+            <div style={{height:40,paddingInline:10,borderRadius:13,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.22)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <img src="/logo.png" alt="BPI" style={{height:24,width:"auto",objectFit:"contain"}}/>
             </div>
             <div style={{flex:1}}>
-              <div style={{fontSize:11,color:C.t3,letterSpacing:"0.1em",fontWeight:600}}>BPI AGADIR</div>
-              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.02em"}}>Field Tracker</div>
+              <div style={{fontSize:10,color:C.accent,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:700,marginBottom:1}}>Field Operations</div>
+              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.03em",color:C.t1}}>BPI Agadir</div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 10px",background:`${C.green}12`,borderRadius:8}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:C.green,animation:"pulse 2s infinite"}}/>
-              <span style={{fontSize:11,color:C.green,fontWeight:700,letterSpacing:"0.06em"}}>LIVE</span>
+            <div style={{display:"flex",alignItems:"center",gap:5,background:"rgba(48,209,88,0.09)",border:"0.5px solid rgba(48,209,88,0.22)",borderRadius:20,padding:"5px 10px"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:C.green,animation:"pulse 2s infinite"}}/>
+              <span style={{fontSize:10,color:C.green,fontWeight:700,letterSpacing:"0.08em"}}>LIVE</span>
             </div>
           </div>
-          {/* Tabs */}
-          <div style={{display:"flex"}}>
-            {TABS.map(t=>{
-              const active=tab===t.id;
+        </div>
+
+        {/* ── TAB BAR ─────────────────────────────────────────── */}
+        <div style={{padding:"14px 14px 4px"}}>
+          <div style={{display:"flex",gap:4,background:"rgba(255,255,255,0.04)",backdropFilter:"blur(10px)",borderRadius:18,border:`0.5px solid ${C.border}`,padding:4}}>
+            {TABS.map(tab=>{
+              const active=mode===tab.id;
               return (
-                <button key={t.id} onClick={()=>setTab(tab===t.id?null:t.id)}
-                  style={{flex:1,position:"relative",background:"transparent",border:"none",padding:"12px 8px 14px",color:active?t.color:C.t3,display:"flex",flexDirection:"column",alignItems:"center",gap:4,fontFamily:"inherit",transition:"color 0.2s"}}>
-                  <span style={{fontSize:20}}>{t.icon}</span>
-                  <span style={{fontSize:11,fontWeight:600,letterSpacing:"0.04em"}}>{t.label.toUpperCase()}</span>
-                  {t.badge>0&&<div style={{position:"absolute",top:8,right:"calc(50% - 22px)",background:t.color,color:"#000",borderRadius:8,padding:"1px 5px",fontSize:9,fontWeight:800,lineHeight:1.6,minWidth:16,textAlign:"center"}}>{t.badge>99?"99+":t.badge}</div>}
-                  <div style={{position:"absolute",bottom:0,left:"20%",right:"20%",height:2,borderRadius:1,background:active?t.color:"transparent",transition:"background 0.2s"}}/>
+                <button key={tab.id} className="tap"
+                  onClick={()=>setMode(mode===tab.id?null:tab.id)}
+                  style={{
+                    flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                    padding:"13px 8px",background:active?tab.color:"transparent",border:"none",borderRadius:14,
+                    color:active?"#000":C.t3,fontWeight:active?700:500,fontSize:13,
+                    letterSpacing:active?"-0.01em":"0.01em",
+                    transition:"all 0.22s cubic-bezier(0.34,1.56,0.64,1)",
+                    boxShadow:active?`0 4px 16px ${tab.color}45`:"none",position:"relative",
+                  }}>
+                  <span style={{fontSize:15}}>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                  {tab.badge>0 && (
+                    <div style={{
+                      position:"absolute",top:5,right:5,
+                      background:active?"rgba(0,0,0,0.25)":tab.color,color:active?"#fff":"#000",
+                      borderRadius:10,minWidth:16,height:16,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:8,fontWeight:800,padding:"0 4px",lineHeight:1,
+                    }}>{tab.badge>99?"99+":tab.badge}</div>
+                  )}
                 </button>
               );
             })}
           </div>
         </div>
-      </div>
 
-      {/* CONTENT */}
-      <div style={{maxWidth:600,margin:"0 auto"}}>
-        {tab==="sample"&&<SampleModule notify={notify} addLog={addLog}/>}
-        {tab==="truck" &&<TruckModule  notify={notify} addLog={addLog}/>}
-        {tab==="log"   &&<LogModule entries={log}/>}
-        {!tab&&(
-          <div style={{padding:"60px 16px 40px",textAlign:"center"}} className="fade">
-            <div style={{marginBottom:28}}><img src="/logo.png" alt="BPI" style={{height:44,opacity:0.5}}/></div>
-            <div style={{fontSize:22,fontWeight:700,letterSpacing:"-0.02em",marginBottom:6}}>BPI Agadir</div>
-            <div style={{fontSize:15,color:C.t2,marginBottom:44,lineHeight:1.6}}>Field Operations Tracker</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:300,margin:"0 auto"}}>
-              {[{id:"sample",icon:"🧪",label:"New Sample",color:C.orange},{id:"truck",icon:"🚛",label:"New Truck",color:C.green}].map(t=>(
-                <button key={t.id} onClick={()=>setTab(t.id)}
-                  style={{padding:"24px 16px",background:C.bg1,border:`1px solid ${C.sep}`,borderRadius:20,color:C.t1,display:"flex",flexDirection:"column",alignItems:"center",gap:10,fontFamily:"inherit"}}>
-                  <span style={{fontSize:32}}>{t.icon}</span>
-                  <span style={{fontSize:15,fontWeight:600}}>{t.label}</span>
-                </button>
-              ))}
+        {/* ── CONTENT ─────────────────────────────────────────── */}
+        <div style={{padding:"12px 14px 60px"}}>
+          {mode==="sample" && <SampleModule notify={notify} addLog={addLog}/>}
+          {mode==="truck"  && <TruckModule  notify={notify} addLog={addLog}/>}
+          {mode==="log"    && <LogModule entries={log}/>}
+          {!mode && (
+            <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
+              <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
+                <img src="/logo.png" alt="BPI" style={{height:44,objectFit:"contain"}}/>
+              </div>
+              <div style={{fontSize:20,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",marginBottom:8}}>BPI Agadir Tracker</div>
+              <div style={{fontSize:14,color:C.t4,lineHeight:1.7,maxWidth:260,margin:"0 auto"}}>
+                Select Sample to register a ticket<br/>or Truck to log a transport
+              </div>
             </div>
-            <button onClick={()=>setTab("log")}
-              style={{marginTop:12,padding:"16px 32px",background:C.bg1,border:`1px solid ${C.sep}`,borderRadius:20,color:C.t2,display:"flex",alignItems:"center",gap:10,fontFamily:"inherit",fontSize:15,fontWeight:500,margin:"12px auto 0"}}>
-              <span style={{fontSize:20}}>📋</span>View Log ({log.length})
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
