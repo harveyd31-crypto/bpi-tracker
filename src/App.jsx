@@ -474,7 +474,20 @@ function SampleModule({notify,addLog}) {
     await window.storage.set(SAMPLE_KEY,JSON.stringify(entry));
     addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(ticket),ticket,stageHistory:[{stage:"collected",label:"Collected",ts:new Date().toISOString()}],geo});
     setData(entry);lastS.current="collected";setForm({});setManual(false);
-    notify(`✓ Sample registered: ${ticket.ticketNo||ticket.supplier||"—"}`);
+    const now = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    notify(
+`🧪 *SAMPLE COLLECTED* — ${now}
+━━━━━━━━━━━━━━━━━━━━
+🎫 Ticket:     ${ticket.ticketNo||"—"}
+📅 Date:       ${ticket.date||"—"}
+🏭 Supplier:   ${ticket.supplier||"—"}
+⛏ Mine Ref:   ${ticket.mineReference||"—"}
+⚖️ Tonnage:    ${ticket.tonnage||"—"}
+📍 Collection: ${ticket.collectionPoint||"—"}
+${ticket.notes?"📝 Notes: "+ticket.notes+"
+":""}━━━━━━━━━━━━━━━━━━━━
+Status: ✅ Collected`
+    );
   }
 
   async function advance(stageId,updT=null){
@@ -482,7 +495,18 @@ function SampleModule({notify,addLog}) {
     const updated={...data,ticket:newT,currentStage:stageId,history:{...data.history,[stageId]:new Date().toISOString()}};
     await window.storage.set(SAMPLE_KEY,JSON.stringify(updated));
     addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(newT),ticket:newT,stageHistory:[{stage:stageId,label:stage.label,ts:new Date().toISOString()}],geo:data.geo||null});
-    setData(updated);lastS.current=stageId;notify(`🧪 ${newT.ticketNo||"—"} → ${stage.label}`);
+    const now2 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    setData(updated);lastS.current=stageId;
+    notify(
+`🧪 *SAMPLE UPDATE* — ${now2}
+━━━━━━━━━━━━━━━━━━━━
+🎫 Ticket:   ${newT.ticketNo||"—"}
+🏭 Supplier: ${newT.supplier||"—"}
+⛏ Mine Ref: ${newT.mineReference||"—"}
+⚖️ Tonnage:  ${newT.tonnage||"—"}
+━━━━━━━━━━━━━━━━━━━━
+Status: ➡️ ${stage.label}`
+    );
   }
 
   async function clear(){await window.storage.delete(SAMPLE_KEY);setData(null);lastS.current=null;}
@@ -564,7 +588,21 @@ function TruckModule({notify,addLog}) {
     await window.storage.set(TRUCK_KEY,JSON.stringify(entry));
     addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(t),ticket:t,stageHistory:[{stage:"loaded",label:"Truck Loaded",ts:new Date().toISOString()}]});
     setData(entry);lastS.current="loaded";setForm({});setManual(false);
-    notify(`✓ Truck logged: ${t.ticketNo||t.immatriculation||"—"}`);
+    const now3 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    notify(
+`🚛 *TRUCK LOADED* — ${now3}
+━━━━━━━━━━━━━━━━━━━━
+🎫 Ticket:      ${t.ticketNo||"—"}
+📅 Date:        ${t.date||"—"}
+🚚 Truck:       ${t.immatriculation||"—"}
+🏭 Fournisseur: ${t.fournisseur||"—"}
+⛏ Mine Ref:    ${t.mineReference||"—"}
+📦 Marchandise: ${t.marchandise||"—"}
+🛣 De:          ${t.lieuChargement||"—"}
+🏁 Vers:        ${t.lieuLivraison||"—"}
+━━━━━━━━━━━━━━━━━━━━
+Status: ✅ Loaded — weights TBD`
+    );
   }
 
   async function logUnloaded(sc){
@@ -573,7 +611,21 @@ function TruckModule({notify,addLog}) {
     await window.storage.set(TRUCK_KEY,JSON.stringify(updated));
     addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(merged),ticket:merged,stageHistory:[{stage:"unloaded",label:"Truck Unloaded",ts:new Date().toISOString()}]});
     setData(updated);lastS.current="unloaded";
-    notify(`🚛 ${merged.ticketNo||"—"} → Truck Unloaded · Net: ${merged.poidsNet||"—"}`);
+    const now4 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+    notify(
+`🚛 *TRUCK UNLOADED* — ${now4}
+━━━━━━━━━━━━━━━━━━━━
+🎫 Ticket:      ${merged.ticketNo||"—"}
+🚚 Truck:       ${merged.immatriculation||"—"}
+🏭 Fournisseur: ${merged.fournisseur||"—"}
+⛏ Mine Ref:    ${merged.mineReference||"—"}
+━━━━━━━━━━━━━━━━━━━━
+⚖️ Poids brut:  ${merged.poidsBrut||"—"}
+⚖️ Poids tare:  ${merged.poidsTare||"—"}
+✅ Poids net:   ${merged.poidsNet||"—"}
+━━━━━━━━━━━━━━━━━━━━
+Status: ✅ Unloaded`
+    );
   }
 
   async function clear(){await window.storage.delete(TRUCK_KEY);setData(null);lastS.current=null;}
