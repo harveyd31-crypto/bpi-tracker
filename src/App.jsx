@@ -476,16 +476,16 @@ function SampleModule({notify,addLog}) {
     setData(entry);lastS.current="collected";setForm({});setManual(false);
     const now = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`🧪 *SAMPLE COLLECTED* — ${now}
-━━━━━━━━━━━━━━━━━━━━
-🎫 Ticket:     ${ticket.ticketNo||"—"}
-📅 Date:       ${ticket.date||"—"}
-🏭 Supplier:   ${ticket.supplier||"—"}
-⛏ Mine Ref:   ${ticket.mineReference||"—"}
-⚖️ Tonnage:    ${ticket.tonnage||"—"}
-📍 Collection: ${ticket.collectionPoint||"—"}
-${ticket.notes?"📝 Notes: "+ticket.notes+"\n":""}━━━━━━━━━━━━━━━━━━━━
-Status: ✅ Collected`
+`SAMPLE COLLECTED — ${now}
+--------------------
+Ticket:      ${ticket.ticketNo||"—"}
+Date:        ${ticket.date||"—"}
+Supplier:    ${ticket.supplier||"—"}
+Mine Ref:    ${ticket.mineReference||"—"}
+Tonnage:     ${ticket.tonnage||"—"}
+Collection:  ${ticket.collectionPoint||"—"}
+${ticket.notes?"Notes:       "+ticket.notes+"\n":""}--------------------
+Status: Collected`
     );
   }
 
@@ -497,14 +497,14 @@ Status: ✅ Collected`
     const now2 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     setData(updated);lastS.current=stageId;
     notify(
-`🧪 *SAMPLE UPDATE* — ${now2}
-━━━━━━━━━━━━━━━━━━━━
-🎫 Ticket:   ${newT.ticketNo||"—"}
-🏭 Supplier: ${newT.supplier||"—"}
-⛏ Mine Ref: ${newT.mineReference||"—"}
-⚖️ Tonnage:  ${newT.tonnage||"—"}
-━━━━━━━━━━━━━━━━━━━━
-Status: ➡️ ${stage.label}`
+`SAMPLE UPDATE — ${now2}
+--------------------
+Ticket:   ${newT.ticketNo||"—"}
+Supplier: ${newT.supplier||"—"}
+Mine Ref: ${newT.mineReference||"—"}
+Tonnage:  ${newT.tonnage||"—"}
+--------------------
+Status: ${stage.label}`
     );
   }
 
@@ -589,18 +589,18 @@ function TruckModule({notify,addLog}) {
     setData(entry);lastS.current="loaded";setForm({});setManual(false);
     const now3 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`🚛 *TRUCK LOADED* — ${now3}
-━━━━━━━━━━━━━━━━━━━━
-🎫 Ticket:      ${t.ticketNo||"—"}
-📅 Date:        ${t.date||"—"}
-🚚 Truck:       ${t.immatriculation||"—"}
-🏭 Fournisseur: ${t.fournisseur||"—"}
-⛏ Mine Ref:    ${t.mineReference||"—"}
-📦 Marchandise: ${t.marchandise||"—"}
-🛣 De:          ${t.lieuChargement||"—"}
-🏁 Vers:        ${t.lieuLivraison||"—"}
-━━━━━━━━━━━━━━━━━━━━
-Status: ✅ Loaded — weights TBD`
+`TRUCK LOADED — ${now3}
+--------------------
+Ticket:      ${t.ticketNo||"—"}
+Date:        ${t.date||"—"}
+Truck:       ${t.immatriculation||"—"}
+Fournisseur: ${t.fournisseur||"—"}
+Mine Ref:    ${t.mineReference||"—"}
+Marchandise: ${t.marchandise||"—"}
+De:          ${t.lieuChargement||"—"}
+Vers:        ${t.lieuLivraison||"—"}
+--------------------
+Status: Loaded — weights TBD`
     );
   }
 
@@ -612,18 +612,18 @@ Status: ✅ Loaded — weights TBD`
     setData(updated);lastS.current="unloaded";
     const now4 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`🚛 *TRUCK UNLOADED* — ${now4}
-━━━━━━━━━━━━━━━━━━━━
-🎫 Ticket:      ${merged.ticketNo||"—"}
-🚚 Truck:       ${merged.immatriculation||"—"}
-🏭 Fournisseur: ${merged.fournisseur||"—"}
-⛏ Mine Ref:    ${merged.mineReference||"—"}
-━━━━━━━━━━━━━━━━━━━━
-⚖️ Poids brut:  ${merged.poidsBrut||"—"}
-⚖️ Poids tare:  ${merged.poidsTare||"—"}
-✅ Poids net:   ${merged.poidsNet||"—"}
-━━━━━━━━━━━━━━━━━━━━
-Status: ✅ Unloaded`
+`TRUCK UNLOADED — ${now4}
+--------------------
+Ticket:      ${merged.ticketNo||"—"}
+Truck:       ${merged.immatriculation||"—"}
+Fournisseur: ${merged.fournisseur||"—"}
+Mine Ref:    ${merged.mineReference||"—"}
+--------------------
+Poids brut:  ${merged.poidsBrut||"—"}
+Poids tare:  ${merged.poidsTare||"—"}
+Poids net:   ${merged.poidsNet||"—"}
+--------------------
+Status: Unloaded`
     );
   }
 
