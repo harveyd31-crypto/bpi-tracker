@@ -820,12 +820,22 @@ export default function App() {
 
   async function sendWhatsApp(msg) {
     try {
-      await fetch("/api/notify", {
+      const res = await fetch("/api/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg }),
       });
-    } catch(e) { console.warn("WhatsApp notify failed:", e.message); }
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("WhatsApp error:", data.error);
+        // Show brief error toast so we know it failed
+        setToast("⚠️ WhatsApp: " + (data.error || "failed"));
+      } else {
+        console.log("WhatsApp sent:", data.sid);
+      }
+    } catch(e) {
+      console.warn("WhatsApp notify failed:", e.message);
+    }
   }
 
   function notify(msg) {
