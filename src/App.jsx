@@ -707,7 +707,16 @@ function LogModule({entries, onDelete}) {
     <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.4s ease"}}>
       <div style={{fontSize:44,marginBottom:14,opacity:0.25}}>📋</div>
       <div style={{fontSize:16,color:C.t2,fontWeight:600,marginBottom:6}}>No entries yet</div>
-      <div style={{fontSize:13,color:C.t4,lineHeight:1.6}}>Logged samples and trucks appear here</div>
+      <div style={{fontSize:13,color:C.t4,lineHeight:1.6,marginBottom:24}}>Logged samples and trucks appear here</div>
+      <button onClick={async()=>{
+        try{
+          const r=await window.storage.get("bpi-log-v4",true);
+          if(r&&r.value){const d=JSON.parse(r.value);alert("Found "+d.length+" entries in Firebase. Reloading...");}
+          else{alert("Firebase returned empty for bpi-log-v4");}
+        }catch(e){alert("Firebase error: "+e.message);}
+      }} style={{background:C.bg2,border:"none",borderRadius:10,color:C.t2,padding:"10px 18px",fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>
+        🔄 Check Firebase
+      </button>
     </div>
   );
 
@@ -826,7 +835,20 @@ export default function App() {
     sendWhatsApp(msg);
   }
 
-  async function loadLog(){try{const r=await window.storage.get(LOG_KEY, true);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
+  async function loadLog(){
+    try {
+      const r = await window.storage.get(LOG_KEY, true);
+      if(r && r.value) {
+        const parsed = JSON.parse(r.value);
+        setLog(Array.isArray(parsed) ? parsed : []);
+      } else {
+        setLog([]);
+      }
+    } catch(e) {
+      console.error("loadLog error:", e.message);
+      setLog([]);
+    }
+  }
   async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
   async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
