@@ -461,7 +461,7 @@ function SampleModule({notify,addLog}) {
   const SF=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
 
   async function load(n=true){
-    try{const r=await window.storage.get(SAMPLE_KEY);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=SAMPLE_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🧪 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
+    try{const r=await window.storage.get(SAMPLE_KEY, true);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=SAMPLE_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🧪 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
     setLoading(false);
   }
   useEffect(()=>{load(false);poll.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(poll.current);},[]);
@@ -471,7 +471,7 @@ function SampleModule({notify,addLog}) {
   async function register(sc){
     const{_scanned,_geo,...ticket}=sc; const geo=_geo||null;
     const entry={ticket,currentStage:"collected",history:{collected:new Date().toISOString()},geo};
-    await window.storage.set(SAMPLE_KEY,JSON.stringify(entry));
+    await window.storage.set(SAMPLE_KEY,JSON.stringify(entry), true);
     addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(ticket),ticket,stageHistory:[{stage:"collected",label:"Collected",ts:new Date().toISOString()}],geo});
     setData(entry);lastS.current="collected";setForm({});setManual(false);
     const now = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
@@ -492,7 +492,7 @@ Status: ✅ Collected`
   async function advance(stageId,updT=null){
     const stage=SAMPLE_STAGES.find(s=>s.id===stageId),newT=updT||data.ticket;
     const updated={...data,ticket:newT,currentStage:stageId,history:{...data.history,[stageId]:new Date().toISOString()}};
-    await window.storage.set(SAMPLE_KEY,JSON.stringify(updated));
+    await window.storage.set(SAMPLE_KEY,JSON.stringify(updated), true);
     addLog({id:`S-${Date.now()}`,type:"sample",label:lbl(newT),ticket:newT,stageHistory:[{stage:stageId,label:stage.label,ts:new Date().toISOString()}],geo:data.geo||null});
     const now2 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     setData(updated);lastS.current=stageId;
@@ -508,7 +508,7 @@ Status: ➡️ ${stage.label}`
     );
   }
 
-  async function clear(){await window.storage.delete(SAMPLE_KEY);setData(null);lastS.current=null;}
+  async function clear(){await window.storage.delete(SAMPLE_KEY, true);setData(null);lastS.current=null;}
   const ci=data?SAMPLE_STAGES.findIndex(s=>s.id===data.currentStage):-1;
 
   if(loading) return <div style={{padding:"20px 0"}}>{[1,2,3].map(i=><div key={i} className="skeleton" style={{height:56,marginBottom:10}}/>)}</div>;
@@ -574,7 +574,7 @@ function TruckModule({notify,addLog}) {
   const TF=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité produit"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
 
   async function load(n=true){
-    try{const r=await window.storage.get(TRUCK_KEY);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=TRUCK_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🚛 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
+    try{const r=await window.storage.get(TRUCK_KEY, true);if(r){const d=JSON.parse(r.value);setData(d);if(n&&lastS.current!==null&&lastS.current!==d.currentStage){const s=TRUCK_STAGES.find(x=>x.id===d.currentStage),t=d.ticket||{};notify(`🚛 ${t.ticketNo||""} → ${s?.label}`);}lastS.current=d.currentStage;}else setData(null);}catch{setData(null);}
     setLoading(false);
   }
   useEffect(()=>{load(false);poll.current=setInterval(()=>load(true),POLL_MS);return()=>clearInterval(poll.current);},[]);
@@ -584,7 +584,7 @@ function TruckModule({notify,addLog}) {
   async function registerLoaded(ticket){
     const t={poidsBrut:"TBD",poidsTare:"TBD",poidsNet:"TBD",...ticket};
     const entry={ticket:t,currentStage:"loaded",history:{loaded:new Date().toISOString()}};
-    await window.storage.set(TRUCK_KEY,JSON.stringify(entry));
+    await window.storage.set(TRUCK_KEY,JSON.stringify(entry), true);
     addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(t),ticket:t,stageHistory:[{stage:"loaded",label:"Truck Loaded",ts:new Date().toISOString()}]});
     setData(entry);lastS.current="loaded";setForm({});setManual(false);
     const now3 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
@@ -607,7 +607,7 @@ Status: ✅ Loaded — weights TBD`
   async function logUnloaded(sc){
     const merged={...data.ticket,...sc};
     const updated={...data,ticket:merged,currentStage:"unloaded",history:{...data.history,unloaded:new Date().toISOString()}};
-    await window.storage.set(TRUCK_KEY,JSON.stringify(updated));
+    await window.storage.set(TRUCK_KEY,JSON.stringify(updated), true);
     addLog({id:`T-${Date.now()}`,type:"truck",label:lbl(merged),ticket:merged,stageHistory:[{stage:"unloaded",label:"Truck Unloaded",ts:new Date().toISOString()}]});
     setData(updated);lastS.current="unloaded";
     const now4 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
@@ -627,7 +627,7 @@ Status: ✅ Unloaded`
     );
   }
 
-  async function clear(){await window.storage.delete(TRUCK_KEY);setData(null);lastS.current=null;}
+  async function clear(){await window.storage.delete(TRUCK_KEY, true);setData(null);lastS.current=null;}
   const ci=data?TRUCK_STAGES.findIndex(s=>s.id===data.currentStage):-1;
   const t=data?.ticket||{};
 
@@ -826,9 +826,9 @@ export default function App() {
     sendWhatsApp(msg);
   }
 
-  async function loadLog(){try{const r=await window.storage.get(LOG_KEY);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
-  async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
-  async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u));}
+  async function loadLog(){try{const r=await window.storage.get(LOG_KEY, true);if(r)setLog(JSON.parse(r.value));}catch{setLog([]);}}
+  async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
+  async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
 
   const TABS=[
