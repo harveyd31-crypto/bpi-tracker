@@ -693,9 +693,57 @@ Status: Unloaded`
 }
 
 // ─── Log Module ───────────────────────────────────────────────────────────────
-function LogModule({entries, onDelete}) {
+function LogModule({entries, onDelete, onResendAll}) {
   const [expanded,setExpanded] = useState({});
   const [confirming,setConfirming] = useState(null);
+  const [resending,setResending] = useState(false);
+
+  async function resendAll() {
+    setResending(true);
+    let sent = 0;
+    for (const entry of entries) {
+      const t = entry.ticket || {};
+      const sh = entry.stageHistory?.[0];
+      const ts = sh?.ts ? new Date(sh.ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
+      let msg = "";
+      if (entry.type === "truck") {
+        msg = `TRUCK ${sh?.label?.toUpperCase()||"LOGGED"} — ${ts}
+--------------------
+Ticket:      ${t.ticketNo||"—"}
+Truck:       ${t.immatriculation||"—"}
+Fournisseur: ${t.fournisseur||"—"}
+Mine Ref:    ${t.mineReference||"—"}
+Poids brut:  ${t.poidsBrut||"—"}
+Poids tare:  ${t.poidsTare||"—"}
+Poids net:   ${t.poidsNet||"—"}
+--------------------
+Status: ${sh?.label||"—"}`;
+      } else {
+        msg = `SAMPLE ${sh?.label?.toUpperCase()||"COLLECTED"} — ${ts}
+--------------------
+Ticket:      ${t.ticketNo||"—"}
+Date:        ${t.date||"—"}
+Supplier:    ${t.supplier||"—"}
+Mine Ref:    ${t.mineReference||"—"}
+Tonnage:     ${t.tonnage||"—"}
+${t.notes?"Notes:       "+t.notes+"
+":""}--------------------
+Status: ${sh?.label||"—"}`;
+      }
+      try {
+        await fetch("/api/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg }),
+        });
+        sent++;
+      } catch(e) { console.warn("Failed to send entry", entry.id); }
+      // Small delay to avoid rate limiting
+      await new Promise(r => setTimeout(r, 300));
+    }
+    setResending(false);
+    alert(`Sent ${sent} of ${entries.length} entries to WhatsApp.`);
+  }
   const toggle = id=>setExpanded(p=>({...p,[id]:!p[id]}));
   function handleDelete(e, id) {
     e.stopPropagation();
@@ -722,8 +770,21 @@ function LogModule({entries, onDelete}) {
 
   return (
     <div style={{animation:"fadeUp 0.3s ease"}}>
-      <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",fontWeight:700,marginBottom:14,textTransform:"uppercase"}}>
-        {entries.length} {entries.length===1?"Entry":"Entries"} — Newest first
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+        <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",fontWeight:700,textTransform:"uppercase"}}>
+          {entries.length} {entries.length===1?"Entry":"Entries"} — Newest first
+        </div>
+        <button onClick={resendAll} disabled={resending} style={{
+          background:resending?"rgba(255,255,255,0.05)":"rgba(48,209,88,0.12)",
+          border:"none",borderRadius:9,
+          color:resending?C.t4:C.green,
+          fontSize:12,fontWeight:700,
+          padding:"7px 13px",fontFamily:"inherit",
+          cursor:resending?"default":"pointer",
+          transition:"all 0.2s",
+        }}>
+          {resending?"Sending...":"Resend All"}
+        </button>
       </div>
       {entries.map((entry,idx)=>{
         const isTruck=entry.type==="truck",color=isTruck?C.green:C.accent;
@@ -944,7 +1005,7 @@ export default function App() {
         <div style={{padding:"12px 14px 60px"}}>
           {mode==="sample" && <SampleModule notify={notify} addLog={addLog}/>}
           {mode==="truck"  && <TruckModule  notify={notify} addLog={addLog}/>}
-          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog}/>}
+          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true}/>}
           {!mode && (
             <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
               <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
