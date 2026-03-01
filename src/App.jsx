@@ -726,8 +726,7 @@ Date:        ${t.date||"—"}
 Supplier:    ${t.supplier||"—"}
 Mine Ref:    ${t.mineReference||"—"}
 Tonnage:     ${t.tonnage||"—"}
-${t.notes?"Notes:       "+t.notes+"
-":""}--------------------
+${t.notes?"Notes:       "+t.notes+"\n":""}--------------------
 Status: ${sh?.label||"—"}`;
       }
       try {
