@@ -736,6 +736,23 @@ Status: Unloaded`
 }
 
 // ─── Log Module ───────────────────────────────────────────────────────────────
+async function downloadSlip(url, filename) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  } catch(e) {
+    // Fallback: open in new tab
+    window.open(url, "_blank");
+  }
+}
+
 function LogModule({entries, onDelete, onResendAll, onUpdate, onFixAll}) {
   const [expanded,setExpanded] = useState({});
   const [confirming,setConfirming] = useState(null);
@@ -879,15 +896,13 @@ Status: ${sh?.label||"—"}`;
               {last && <div style={{fontSize:11,color:C.t4,marginTop:1}}>{last.label} · {fmt(last.ts)}</div>}
               <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10}} onClick={e=>e.stopPropagation()}>
                 {et._photoUrl && (
-                  <a
-                    href={et._photoUrl}
-                    download={`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`}
+                  <button
+                    onClick={()=>downloadSlip(et._photoUrl,`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`)}
                     style={{
-                      background:"rgba(255,159,10,0.12)",borderRadius:8,color:"#FF9F0A",
-                      fontSize:12,fontWeight:700,padding:"6px 12px",
-                      textDecoration:"none",display:"inline-block",
+                      background:"rgba(255,159,10,0.12)",border:"none",borderRadius:8,color:"#FF9F0A",
+                      fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit",cursor:"pointer",
                     }}
-                  >Slip</a>
+                  >Slip</button>
                 )}
                 <button onClick={e=>{e.stopPropagation();startEdit(e,entry);}} style={{background:"rgba(10,132,255,0.12)",border:"none",borderRadius:8,color:"#0A84FF",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit"}}>Edit</button>
                 <button onClick={e=>{e.stopPropagation();handleDelete(e,entry.id);}} style={{background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",border:"none",borderRadius:8,color:confirming===entry.id?"#fff":"#FF453A",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit",transition:"all 0.2s"}}>
@@ -928,20 +943,15 @@ Status: ${sh?.label||"—"}`;
                     <div style={{padding:"12px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Photo</div>
-                        <a
-                          href={et._photoUrl}
-                          download={`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`}
-                          onClick={e=>e.stopPropagation()}
+                        <button
+                          onClick={e=>{e.stopPropagation();downloadSlip(et._photoUrl,`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`);}}
                           style={{
-                            background:"rgba(10,132,255,0.12)",
-                            borderRadius:8,
-                            color:"#0A84FF",
-                            fontSize:12,fontWeight:700,
-                            padding:"5px 11px",
-                            textDecoration:"none",
-                            display:"inline-block",
+                            background:"rgba(10,132,255,0.12)",border:"none",
+                            borderRadius:8,color:"#0A84FF",
+                            fontSize:12,fontWeight:700,padding:"5px 11px",
+                            fontFamily:"inherit",cursor:"pointer",
                           }}
-                        >Download</a>
+                        >Download</button>
                       </div>
                       <a href={et._photoUrl} target="_blank" rel="noreferrer">
                         <img src={et._photoUrl} alt="ticket" style={{width:"100%",borderRadius:11,display:"block",maxHeight:180,objectFit:"cover"}}/>
