@@ -33,19 +33,19 @@ async function uploadPhoto(file, folder) {
 // ─── Claude OCR ───────────────────────────────────────────────────────────────
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 async function claudeScan(b64, mime, ctx) {
-  const samplePrompt = `You are reading a handwritten BPI (Barite Processing International) sample collection slip written in French.
-Extract the following fields exactly as written. The form fields are:
-- Date (format DD/MM/YYYY)
-- Fournisseur (supplier name — handwritten, may use dots between letters like T.A.R.L.A.W.I.)
-- Mine (mine reference, often TAOUS followed by a code in parentheses)
-- Quantité estimée (estimated quantity — always a number followed by T for metric tons, e.g. "4.000 T" or "400T")
-- Commentaires (comments about the barite color/quality, e.g. "Gris un peu Rose")
+  const samplePrompt = `Read this handwritten French form carefully and transcribe exactly what is written — do not interpret, correct or assume anything.
 
-Return ONLY valid JSON with no explanation:
+The form has these fields, map them to this JSON:
+- Date → date
+- Fournisseur → supplier (copy the handwriting exactly as you see it)
+- Mine → mineReference (copy exactly as written)
+- Quantité estimée → tonnage (a number followed by T, e.g. 4.000 T or 400T)
+- Commentaires → notes (copy exactly)
+
+Return ONLY this JSON with no explanation, no markdown:
 {"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}
 
-Map: date→date, Fournisseur→supplier, Mine→mineReference, Quantité estimée→tonnage (keep number and T), Commentaires→notes.
-If a field is empty or unreadable, use empty string. Do not invent data.`;
+Empty or unreadable fields use empty string. Never invent or guess data.`;
 
   const truckPrompt = `You are reading a handwritten BPI (Barite Processing International) truck transport ticket (Bon de Transport) written in French.
 Extract all fields exactly as written. Common fields include ticket number, date, driver name, truck plate (immatriculation), supplier (fournisseur), weights (poids brut, poids tare, poids net in tonnes).
