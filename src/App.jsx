@@ -873,6 +873,23 @@ Status: ${sh?.label||"—"}`;
                 {last && <div style={{fontSize:11,color:C.t4,marginTop:2}}>{last.label} · {fmt(last.ts)}</div>}
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                {et._photoUrl && (
+                  <a
+                    href={et._photoUrl}
+                    download={`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`}
+                    onClick={e=>e.stopPropagation()}
+                    style={{
+                      background:"rgba(255,159,10,0.12)",
+                      borderRadius:8,
+                      color:"#FF9F0A",
+                      fontSize:12,fontWeight:700,
+                      padding:"6px 10px",
+                      textDecoration:"none",
+                      whiteSpace:"nowrap",
+                      display:"inline-block",
+                    }}
+                  >Slip</a>
+                )}
                 <button
                   onClick={e=>startEdit(e,entry)}
                   style={{
