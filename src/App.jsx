@@ -693,10 +693,23 @@ Status: Unloaded`
 }
 
 // ─── Log Module ───────────────────────────────────────────────────────────────
-function LogModule({entries, onDelete, onResendAll}) {
+function LogModule({entries, onDelete, onResendAll, onUpdate}) {
   const [expanded,setExpanded] = useState({});
   const [confirming,setConfirming] = useState(null);
   const [resending,setResending] = useState(false);
+  const [editing,setEditing] = useState(null); // {id, ticket, type}
+  const [editForm,setEditForm] = useState({});
+
+  function startEdit(e, entry) {
+    e.stopPropagation();
+    setEditing(entry);
+    setEditForm({...entry.ticket});
+  }
+  function cancelEdit() { setEditing(null); setEditForm({}); }
+  async function saveEdit() {
+    await onUpdate(editing.id, editForm);
+    setEditing(null); setEditForm({});
+  }
 
   async function resendAll() {
     setResending(true);
@@ -707,7 +720,7 @@ function LogModule({entries, onDelete, onResendAll}) {
       const ts = sh?.ts ? new Date(sh.ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
       let msg = "";
       if (entry.type === "truck") {
-        msg = `TRUCK ${sh?.label?.toUpperCase()||"LOGGED"} — ${ts}
+        msg = `TRUCK LOADED — ${ts}
 --------------------
 Ticket:      ${t.ticketNo||"—"}
 Truck:       ${t.immatriculation||"—"}
@@ -719,7 +732,7 @@ Poids net:   ${t.poidsNet||"—"}
 --------------------
 Status: ${sh?.label||"—"}`;
       } else {
-        msg = `SAMPLE ${sh?.label?.toUpperCase()||"COLLECTED"} — ${ts}
+        msg = `SAMPLE COLLECTED — ${ts}
 --------------------
 Ticket:      ${t.ticketNo||"—"}
 Date:        ${t.date||"—"}
@@ -807,6 +820,17 @@ Status: ${sh?.label||"—"}`;
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
                 <button
+                  onClick={e=>startEdit(e,entry)}
+                  style={{
+                    background:"rgba(10,132,255,0.12)",
+                    border:"none",borderRadius:8,
+                    color:"#0A84FF",
+                    fontSize:12,fontWeight:700,
+                    padding:"6px 10px",fontFamily:"inherit",
+                    whiteSpace:"nowrap",
+                  }}
+                >Edit</button>
+                <button
                   onClick={e=>handleDelete(e,entry.id)}
                   style={{
                     background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",
@@ -867,6 +891,27 @@ Status: ${sh?.label||"—"}`;
           </Card>
         );
       })}
+      {editing && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"flex-end",padding:"0 0 20px 0"}}>
+          <div style={{background:"#1C1C1E",borderRadius:"20px 20px 16px 16px",width:"100%",maxHeight:"85vh",overflow:"auto",padding:"20px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>Edit Entry</div>
+              <button onClick={cancelEdit} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,color:"rgba(255,255,255,0.6)",padding:"6px 12px",fontSize:13,fontFamily:"inherit"}}>Cancel</button>
+            </div>
+            {Object.entries(editForm).filter(([k])=>!k.startsWith("_")).map(([k,v])=>(
+              <div key={k} style={{marginBottom:12}}>
+                <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:5}}>{k.replace(/([A-Z])/g," $1").trim()}</div>
+                <input value={v||""} onChange={e=>setEditForm(p=>({...p,[k]:e.target.value}))}
+                  style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:14,fontFamily:"inherit",boxSizing:"border-box"}}
+                />
+              </div>
+            ))}
+            <button onClick={saveEdit} style={{width:"100%",background:"#0A84FF",border:"none",borderRadius:12,color:"#fff",padding:"14px",fontSize:15,fontWeight:700,fontFamily:"inherit",marginTop:8}}>
+              Save Changes
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -921,6 +966,7 @@ export default function App() {
   }
   async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
   async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
+  async function updateLog(id,ticket){const u=log.map(e=>e.id===id?{...e,ticket:{...e.ticket,...ticket}}:e);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u),true);}
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
 
   const TABS=[
@@ -1004,7 +1050,7 @@ export default function App() {
         <div style={{padding:"12px 14px 60px"}}>
           {mode==="sample" && <SampleModule notify={notify} addLog={addLog}/>}
           {mode==="truck"  && <TruckModule  notify={notify} addLog={addLog}/>}
-          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true}/>}
+          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true} onUpdate={updateLog}/>}
           {!mode && (
             <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
               <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
