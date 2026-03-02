@@ -693,7 +693,7 @@ Status: Unloaded`
 }
 
 // ─── Log Module ───────────────────────────────────────────────────────────────
-function LogModule({entries, onDelete, onResendAll, onUpdate}) {
+function LogModule({entries, onDelete, onResendAll, onUpdate, onFixAll}) {
   const [expanded,setExpanded] = useState({});
   const [confirming,setConfirming] = useState(null);
   const [resending,setResending] = useState(false);
@@ -706,8 +706,8 @@ function LogModule({entries, onDelete, onResendAll, onUpdate}) {
     setEditForm({...entry.ticket});
   }
   function cancelEdit() { setEditing(null); setEditForm({}); }
-  async function saveEdit() {
-    await onUpdate(editing.id, editForm);
+  async function saveEdit(fixStage=false) {
+    await onUpdate(editing.id, editForm, fixStage);
     setEditing(null); setEditForm({});
   }
 
@@ -796,6 +796,16 @@ Status: ${sh?.label||"—"}`;
           transition:"all 0.2s",
         }}>
           {resending?"Sending...":"Resend All"}
+        </button>
+        <button onClick={onFixAll} style={{
+          background:"rgba(48,209,88,0.12)",
+          border:"none",borderRadius:9,
+          color:"#30D158",
+          fontSize:12,fontWeight:700,
+          padding:"7px 13px",fontFamily:"inherit",
+          cursor:"pointer",
+        }}>
+          Fix All
         </button>
       </div>
       {entries.map((entry,idx)=>{
@@ -906,7 +916,12 @@ Status: ${sh?.label||"—"}`;
                 />
               </div>
             ))}
-            <button onClick={saveEdit} style={{width:"100%",background:"#0A84FF",border:"none",borderRadius:12,color:"#fff",padding:"14px",fontSize:15,fontWeight:700,fontFamily:"inherit",marginTop:8}}>
+            {editing?.type==="sample" && (
+              <button onClick={()=>saveEdit(true)} style={{width:"100%",background:"rgba(48,209,88,0.15)",border:"1px solid rgba(48,209,88,0.3)",borderRadius:12,color:"#30D158",padding:"12px",fontSize:14,fontWeight:700,fontFamily:"inherit",marginTop:8,marginBottom:6}}>
+                Fix Status → Collected
+              </button>
+            )}
+            <button onClick={()=>saveEdit(false)} style={{width:"100%",background:"#0A84FF",border:"none",borderRadius:12,color:"#fff",padding:"14px",fontSize:15,fontWeight:700,fontFamily:"inherit",marginTop:2}}>
               Save Changes
             </button>
           </div>
@@ -966,7 +981,27 @@ export default function App() {
   }
   async function addLog(entry){const u=[entry,...log].slice(0,200);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
   async function deleteLog(id){const u=log.filter(e=>e.id!==id);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u), true);}
-  async function updateLog(id,ticket){const u=log.map(e=>e.id===id?{...e,ticket:{...e.ticket,...ticket}}:e);setLog(u);await window.storage.set(LOG_KEY,JSON.stringify(u),true);}
+  async function fixAllSampleStatuses(){
+    const u=log.map(e=>{
+      if(e.type!=="sample") return e;
+      return {...e,stageHistory:e.stageHistory?.map(sh=>({...sh,label:"Collected",stage:"collected"}))};
+    });
+    setLog(u);
+    await window.storage.set(LOG_KEY,JSON.stringify(u),true);
+    alert("All sample statuses fixed to Collected.");
+  }
+  async function updateLog(id,ticket,fixStage=false){
+    const u=log.map(e=>{
+      if(e.id!==id) return e;
+      const updated={...e,ticket:{...e.ticket,...ticket}};
+      if(fixStage && e.type==="sample"){
+        updated.stageHistory=e.stageHistory?.map(sh=>({...sh,label:"Collected",stage:"collected"}));
+      }
+      return updated;
+    });
+    setLog(u);
+    await window.storage.set(LOG_KEY,JSON.stringify(u),true);
+  }
   useEffect(()=>{loadLog();pollRef.current=setInterval(loadLog,POLL_MS);return()=>clearInterval(pollRef.current);},[]);
 
   const TABS=[
@@ -1050,7 +1085,7 @@ export default function App() {
         <div style={{padding:"12px 14px 60px"}}>
           {mode==="sample" && <SampleModule notify={notify} addLog={addLog}/>}
           {mode==="truck"  && <TruckModule  notify={notify} addLog={addLog}/>}
-          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true} onUpdate={updateLog}/>}
+          {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true} onUpdate={updateLog} onFixAll={fixAllSampleStatuses}/>}
           {!mode && (
             <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
               <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
