@@ -527,6 +527,9 @@ Collection:  ${ticket.collectionPoint||"—"}
 ${ticket.notes?"Notes:       "+ticket.notes+"\n":""}--------------------
 Status: Collected`
     );
+    // Auto-clear after collection — no pipeline stages needed
+    await window.storage.delete(SAMPLE_KEY, true);
+    setData(null); lastS.current=null;
   }
 
   async function advance(stageId,updT=null){
