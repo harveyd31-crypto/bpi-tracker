@@ -903,7 +903,23 @@ Status: ${sh?.label||"—"}`;
                   <>
                     <Divider/>
                     <div style={{padding:"12px 16px"}}>
-                      <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>Photo</div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Photo</div>
+                        <a
+                          href={et._photoUrl}
+                          download={`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`}
+                          onClick={e=>e.stopPropagation()}
+                          style={{
+                            background:"rgba(10,132,255,0.12)",
+                            borderRadius:8,
+                            color:"#0A84FF",
+                            fontSize:12,fontWeight:700,
+                            padding:"5px 11px",
+                            textDecoration:"none",
+                            display:"inline-block",
+                          }}
+                        >Download</a>
+                      </div>
                       <a href={et._photoUrl} target="_blank" rel="noreferrer">
                         <img src={et._photoUrl} alt="ticket" style={{width:"100%",borderRadius:11,display:"block",maxHeight:180,objectFit:"cover"}}/>
                       </a>
