@@ -737,6 +737,9 @@ function LogModule({entries, onDelete, onResendAll, onUpdate, onFixAll}) {
   const [expanded,setExpanded] = useState({});
   const [confirming,setConfirming] = useState(null);
   const [resending,setResending] = useState(false);
+  const [showResendPicker,setShowResendPicker] = useState(false);
+  const [resendFrom,setResendFrom] = useState("");
+  const [resendTo,setResendTo] = useState("");
   const [editing,setEditing] = useState(null); // {id, ticket, type}
   const [editForm,setEditForm] = useState({});
 
@@ -751,10 +754,11 @@ function LogModule({entries, onDelete, onResendAll, onUpdate, onFixAll}) {
     setEditing(null); setEditForm({});
   }
 
-  async function resendAll() {
+  async function resendAll(filtered) {
+    setShowResendPicker(false);
     setResending(true);
     let sent = 0;
-    for (const entry of entries) {
+    for (const entry of filtered) {
       const t = entry.ticket || {};
       const sh = entry.stageHistory?.[0];
       const ts = sh?.ts ? new Date(sh.ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
@@ -794,7 +798,7 @@ Status: ${sh?.label||"—"}`;
       await new Promise(r => setTimeout(r, 300));
     }
     setResending(false);
-    alert(`Sent ${sent} of ${entries.length} entries to WhatsApp.`);
+    alert(`Sent ${sent} of ${filtered.length} entries to WhatsApp.`);
   }
   const toggle = id=>setExpanded(p=>({...p,[id]:!p[id]}));
   function handleDelete(e, id) {
@@ -826,7 +830,7 @@ Status: ${sh?.label||"—"}`;
         <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",fontWeight:700,textTransform:"uppercase"}}>
           {entries.length} {entries.length===1?"Entry":"Entries"} — Newest first
         </div>
-        <button onClick={resendAll} disabled={resending} style={{
+        <button onClick={()=>!resending&&setShowResendPicker(true)} disabled={resending} style={{
           background:resending?"rgba(255,255,255,0.05)":"rgba(48,209,88,0.12)",
           border:"none",borderRadius:9,
           color:resending?C.t4:C.green,
@@ -835,7 +839,7 @@ Status: ${sh?.label||"—"}`;
           cursor:resending?"default":"pointer",
           transition:"all 0.2s",
         }}>
-          {resending?"Sending...":"Resend All"}
+          {resending?"Sending...":"Resend"}
         </button>
         <button onClick={onFixAll} style={{
           background:"rgba(48,209,88,0.12)",
@@ -957,6 +961,48 @@ Status: ${sh?.label||"—"}`;
           </Card>
         );
       })}
+      {showResendPicker && (() => {
+        const from = resendFrom ? new Date(resendFrom+"T00:00:00") : null;
+        const to   = resendTo   ? new Date(resendTo+"T23:59:59")   : null;
+        const filtered = entries.filter(e => {
+          const ts = e.stageHistory?.[0]?.ts;
+          if (!ts) return true;
+          const d = new Date(ts);
+          if (from && d < from) return false;
+          if (to   && d > to)   return false;
+          return true;
+        });
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"flex-end",padding:"0 0 20px 0"}}>
+            <div style={{background:"#1C1C1E",borderRadius:"20px 20px 16px 16px",width:"100%",padding:"20px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>Resend to WhatsApp</div>
+                <button onClick={()=>setShowResendPicker(false)} style={{background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,color:"rgba(255,255,255,0.6)",padding:"6px 12px",fontSize:13,fontFamily:"inherit"}}>Cancel</button>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>From</div>
+                  <input type="date" value={resendFrom} onChange={e=>setResendFrom(e.target.value)}
+                    style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:14,fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}
+                  />
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6}}>To</div>
+                  <input type="date" value={resendTo} onChange={e=>setResendTo(e.target.value)}
+                    style={{width:"100%",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"10px 12px",color:"#fff",fontSize:14,fontFamily:"inherit",boxSizing:"border-box",colorScheme:"dark"}}
+                  />
+                </div>
+              </div>
+              <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",textAlign:"center",marginBottom:14}}>
+                {filtered.length} {filtered.length===1?"entry":"entries"} selected{(!resendFrom&&!resendTo)?" (all entries)":""}
+              </div>
+              <button onClick={()=>resendAll(filtered)} disabled={filtered.length===0} style={{width:"100%",background:filtered.length===0?"rgba(255,255,255,0.05)":"rgba(48,209,88,0.15)",border:"none",borderRadius:12,color:filtered.length===0?"rgba(255,255,255,0.3)":"#30D158",padding:"14px",fontSize:15,fontWeight:700,fontFamily:"inherit"}}>
+                Send {filtered.length} {filtered.length===1?"Entry":"Entries"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       {editing && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"flex-end",padding:"0 0 20px 0"}}>
           <div style={{background:"#1C1C1E",borderRadius:"20px 20px 16px 16px",width:"100%",maxHeight:"85vh",overflow:"auto",padding:"20px 16px"}}>
