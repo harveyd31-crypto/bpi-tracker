@@ -476,7 +476,7 @@ function SampleModule({notify,addLog}) {
     setData(entry);lastS.current="collected";setForm({});setManual(false);
     const now = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`SAMPLE COLLECTED — ${now}
+`🧪 SAMPLE COLLECTED — ${now}
 --------------------
 Ticket:      ${ticket.ticketNo||"—"}
 Date:        ${ticket.date||"—"}
@@ -497,7 +497,7 @@ Status: Collected`
     const now2 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     setData(updated);lastS.current=stageId;
     notify(
-`SAMPLE UPDATE — ${now2}
+`🧪 SAMPLE UPDATE — ${now2}
 --------------------
 Ticket:   ${newT.ticketNo||"—"}
 Supplier: ${newT.supplier||"—"}
@@ -589,7 +589,7 @@ function TruckModule({notify,addLog}) {
     setData(entry);lastS.current="loaded";setForm({});setManual(false);
     const now3 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`TRUCK LOADED — ${now3}
+`🚛 TRUCK LOADED — ${now3}
 --------------------
 Ticket:      ${t.ticketNo||"—"}
 Date:        ${t.date||"—"}
@@ -612,7 +612,7 @@ Status: Loaded — weights TBD`
     setData(updated);lastS.current="unloaded";
     const now4 = new Date().toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
     notify(
-`TRUCK UNLOADED — ${now4}
+`🚛 TRUCK UNLOADED — ${now4}
 --------------------
 Ticket:      ${merged.ticketNo||"—"}
 Truck:       ${merged.immatriculation||"—"}
@@ -720,7 +720,7 @@ function LogModule({entries, onDelete, onResendAll, onUpdate}) {
       const ts = sh?.ts ? new Date(sh.ts).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}) : "—";
       let msg = "";
       if (entry.type === "truck") {
-        msg = `TRUCK LOADED — ${ts}
+        msg = `🚛 TRUCK LOADED — ${ts}
 --------------------
 Ticket:      ${t.ticketNo||"—"}
 Truck:       ${t.immatriculation||"—"}
@@ -732,7 +732,7 @@ Poids net:   ${t.poidsNet||"—"}
 --------------------
 Status: ${sh?.label||"—"}`;
       } else {
-        msg = `SAMPLE COLLECTED — ${ts}
+        msg = `🧪 SAMPLE COLLECTED — ${ts}
 --------------------
 Ticket:      ${t.ticketNo||"—"}
 Date:        ${t.date||"—"}
