@@ -858,64 +858,38 @@ Status: ${sh?.label||"—"}`;
         const et=entry.ticket||{},open=expanded[entry.id];
         return (
           <Card key={entry.id} style={{marginBottom:9,overflow:"hidden",animation:`fadeUp 0.3s ease ${Math.min(idx,6)*0.04}s both`}}>
-            <div className="tap" onClick={()=>toggle(entry.id)} style={{padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:40,height:40,borderRadius:12,flexShrink:0,background:`${color}13`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-                {isTruck?"🚛":"🧪"}
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+            <div className="tap" onClick={()=>toggle(entry.id)} style={{padding:"12px 14px",cursor:"pointer"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:7}}>
                   <Pill label={isTruck?"TRUCK":"SAMPLE"} color={color} small/>
                   {entry.geo && <span style={{fontSize:11}}>📍</span>}
                 </div>
-                <div style={{fontSize:13,color:C.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {isTruck?`${et.ticketNo||"—"}  ·  ${et.immatriculation||"—"}  ·  ${et.fournisseur||"—"}`:`${et.ticketNo||"—"}  ·  ${et.supplier||"—"}`}
-                </div>
-                {last && <div style={{fontSize:11,color:C.t4,marginTop:2}}>{last.label} · {fmt(last.ts)}</div>}
+                <div style={{color:C.t4,fontSize:13,transition:"transform 0.2s",transform:open?"rotate(180deg)":"none"}}>▼</div>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <div style={{fontSize:14,color:C.t1,fontWeight:600,marginBottom:3}}>
+                {isTruck
+                  ? `${et.ticketNo||"—"}  ·  ${et.immatriculation||"—"}  ·  ${et.fournisseur||"—"}`
+                  : `${et.supplier||"—"}`}
+              </div>
+              {isTruck && et.mineReference && <div style={{fontSize:12,color:C.t3,marginBottom:2}}>{et.mineReference}</div>}
+              {!isTruck && <div style={{fontSize:12,color:C.t3,marginBottom:2}}>{et.mineReference||""}{et.tonnage?" · "+et.tonnage:""}</div>}
+              {last && <div style={{fontSize:11,color:C.t4,marginTop:1}}>{last.label} · {fmt(last.ts)}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:10}} onClick={e=>e.stopPropagation()}>
                 {et._photoUrl && (
                   <a
                     href={et._photoUrl}
                     download={`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`}
-                    onClick={e=>e.stopPropagation()}
                     style={{
-                      background:"rgba(255,159,10,0.12)",
-                      borderRadius:8,
-                      color:"#FF9F0A",
-                      fontSize:12,fontWeight:700,
-                      padding:"6px 10px",
-                      textDecoration:"none",
-                      whiteSpace:"nowrap",
-                      display:"inline-block",
+                      background:"rgba(255,159,10,0.12)",borderRadius:8,color:"#FF9F0A",
+                      fontSize:12,fontWeight:700,padding:"6px 12px",
+                      textDecoration:"none",display:"inline-block",
                     }}
                   >Slip</a>
                 )}
-                <button
-                  onClick={e=>startEdit(e,entry)}
-                  style={{
-                    background:"rgba(10,132,255,0.12)",
-                    border:"none",borderRadius:8,
-                    color:"#0A84FF",
-                    fontSize:12,fontWeight:700,
-                    padding:"6px 10px",fontFamily:"inherit",
-                    whiteSpace:"nowrap",
-                  }}
-                >Edit</button>
-                <button
-                  onClick={e=>handleDelete(e,entry.id)}
-                  style={{
-                    background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",
-                    border:"none",borderRadius:8,
-                    color:confirming===entry.id?"#fff":"#FF453A",
-                    fontSize:12,fontWeight:700,
-                    padding:"6px 10px",fontFamily:"inherit",
-                    transition:"all 0.2s",
-                    whiteSpace:"nowrap",
-                  }}
-                >
+                <button onClick={e=>{e.stopPropagation();startEdit(e,entry);}} style={{background:"rgba(10,132,255,0.12)",border:"none",borderRadius:8,color:"#0A84FF",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit"}}>Edit</button>
+                <button onClick={e=>{e.stopPropagation();handleDelete(e,entry.id);}} style={{background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",border:"none",borderRadius:8,color:confirming===entry.id?"#fff":"#FF453A",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit",transition:"all 0.2s"}}>
                   {confirming===entry.id?"Confirm?":"Delete"}
                 </button>
-                <div style={{color:C.t4,fontSize:14,transition:"transform 0.2s",transform:open?"rotate(180deg)":"none"}}>▼</div>
               </div>
             </div>
             {open && (
