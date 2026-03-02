@@ -738,7 +738,11 @@ Status: Unloaded`
 // ─── Log Module ───────────────────────────────────────────────────────────────
 async function downloadSlip(url, filename) {
   try {
-    const res = await fetch(url);
+    // Add fl_attachment Cloudinary flag to force download
+    const dlUrl = url.includes("cloudinary.com")
+      ? url.replace("/upload/", "/upload/fl_attachment/")
+      : url;
+    const res = await fetch(dlUrl, {mode:"cors"});
     const blob = await res.blob();
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
