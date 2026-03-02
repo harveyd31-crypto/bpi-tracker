@@ -33,9 +33,27 @@ async function uploadPhoto(file, folder) {
 // ─── Claude OCR ───────────────────────────────────────────────────────────────
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY;
 async function claudeScan(b64, mime, ctx) {
-  const prompt = ctx==="sample"
-    ? `BPI barite sample ticket. Return ONLY JSON: {"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}`
-    : `BPI Bon de Transport. Return ONLY JSON: {"ticketNo":"","date":"","lieuChargement":"","lieuLivraison":"","marchandise":"","transporteur":"","immatriculation":"","heureDepart":"","fournisseur":"","mineReference":"","qualiteProduit":"","poidsBrut":"","poidsTare":"","poidsNet":"","responsableStock":"","numeroChauffeur":"","societe":""}`;
+  const samplePrompt = `You are reading a handwritten BPI (Barite Processing International) sample collection slip written in French.
+Extract the following fields exactly as written. The form fields are:
+- Date (format DD/MM/YYYY)
+- Fournisseur (supplier name — handwritten, may use dots between letters like T.A.R.L.A.W.I.)
+- Mine (mine reference, often TAOUS followed by a code in parentheses)
+- Quantité estimée (estimated quantity — always a number followed by T for metric tons, e.g. "4.000 T" or "400T")
+- Commentaires (comments about the barite color/quality, e.g. "Gris un peu Rose")
+
+Return ONLY valid JSON with no explanation:
+{"ticketNo":"","date":"","supplier":"","mineReference":"","tonnage":"","collectionPoint":"","notes":""}
+
+Map: date→date, Fournisseur→supplier, Mine→mineReference, Quantité estimée→tonnage (keep number and T), Commentaires→notes.
+If a field is empty or unreadable, use empty string. Do not invent data.`;
+
+  const truckPrompt = `You are reading a handwritten BPI (Barite Processing International) truck transport ticket (Bon de Transport) written in French.
+Extract all fields exactly as written. Common fields include ticket number, date, driver name, truck plate (immatriculation), supplier (fournisseur), weights (poids brut, poids tare, poids net in tonnes).
+Return ONLY valid JSON with no explanation:
+{"ticketNo":"","date":"","lieuChargement":"","lieuLivraison":"","marchandise":"","transporteur":"","immatriculation":"","heureDepart":"","fournisseur":"","mineReference":"","qualiteProduit":"","poidsBrut":"","poidsTare":"","poidsNet":"","responsableStock":"","numeroChauffeur":"","societe":""}
+If a field is empty or unreadable, use empty string. Do not invent data.`;
+
+  const prompt = ctx==="sample" ? samplePrompt : truckPrompt;
   const resp = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
     headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
@@ -56,10 +74,7 @@ const LOG_KEY    = "bpi-log-v4";
 const POLL_MS    = 3000;
 
 const SAMPLE_STAGES = [
-  { id:"collected",   label:"Collected",     sub:"Ticket scanned at mine",     color:"#FF9F0A" },
-  { id:"stock",       label:"At Stockyard",  sub:"Delivered to Agadir stock",  color:"#30D158" },
-  { id:"preparation", label:"Preparation",   sub:"Sample being prepared",      color:"#0A84FF" },
-  { id:"lab",         label:"At Lab",        sub:"Sent to laboratory",         color:"#BF5AF2" },
+  { id:"collected", label:"Collected", sub:"Ticket scanned at mine", color:"#FF9F0A" },
 ];
 const TRUCK_STAGES = [
   { id:"loaded",   label:"Truck Loaded",    sub:"Scanned at mine site",      color:"#FF9F0A" },
