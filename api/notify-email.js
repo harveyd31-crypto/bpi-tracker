@@ -111,7 +111,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: "BPI Field Tracker <notifications@bpi-tracker.vercel.app>",
+        from: "BPI Field Tracker <onboarding@resend.dev>",
         to: recipients,
         subject,
         html,
