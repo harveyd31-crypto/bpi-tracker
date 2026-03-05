@@ -527,6 +527,7 @@ Collection:  ${ticket.collectionPoint||"—"}
 ${ticket.notes?"Notes:       "+ticket.notes+"\n":""}--------------------
 Status: Collected`
     );
+    sendEmail("sample", ticket, now, geo, ticket._photoUrl||null);
     // Auto-clear after collection — no pipeline stages needed
     await window.storage.delete(SAMPLE_KEY, true);
     setData(null); lastS.current=null;
@@ -645,6 +646,7 @@ Vers:        ${t.lieuLivraison||"—"}
 --------------------
 Status: Loaded — weights TBD`
     );
+    sendEmail("truck", t, now3, null, t._photoUrl||null);
   }
 
   async function logUnloaded(sc){
@@ -1047,6 +1049,19 @@ export default function App() {
   const [toast,setToast]   = useState(null);
   const [log,setLog]       = useState([]);
   const toastRef=useRef(null); const pollRef=useRef(null);
+
+  async function sendEmail(type, ticket, ts, geo, photoUrl) {
+    try {
+      const res = await fetch("/api/notify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, ticket, ts, geo, photoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) console.error("Email error:", data.error);
+      else console.log("Email sent:", data.id);
+    } catch(e) { console.warn("Email notify failed:", e.message); }
+  }
 
   async function sendWhatsApp(msg) {
     try {
