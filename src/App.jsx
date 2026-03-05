@@ -877,6 +877,31 @@ Status: ${sh?.label||"—"}`;
         }}>
           Fix All
         </button>
+        <button onClick={async()=>{
+          const res = await fetch("/api/notify-email", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({
+              type:"sample",
+              ticket:{supplier:"TARIAWI AMR",mineReference:"TAOUS (TKT6)",tonnage:"4000 T",date:"02/03/2026",notes:"Test email — Gris un peu Rose"},
+              ts:"02 Mar, 09:14",
+              geo:{lat:31.0969,lng:-4.0102},
+              photoUrl:null,
+              testRecipient:"dh@gmcpl.net"
+            })
+          });
+          const d = await res.json();
+          alert(d.id ? "✅ Test email sent to dh@gmcpl.net" : "❌ Error: "+d.error);
+        }} style={{
+          background:"rgba(10,132,255,0.12)",
+          border:"none",borderRadius:9,
+          color:"#0A84FF",
+          fontSize:12,fontWeight:700,
+          padding:"7px 13px",fontFamily:"inherit",
+          cursor:"pointer",
+        }}>
+          Test Email
+        </button>
       </div>
       {entries.map((entry,idx)=>{
         const isTruck=entry.type==="truck",color=isTruck?C.green:C.accent;

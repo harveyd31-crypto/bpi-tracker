@@ -1,11 +1,11 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { type, ticket, ts, geo, photoUrl } = req.body;
+  const { type, ticket, ts, geo, photoUrl, testRecipient } = req.body;
   if (!type || !ticket) return res.status(400).json({ error: "Missing data" });
 
   const apiKey = process.env.RESEND_API_KEY;
-  const recipients = [
+  const recipients = testRecipient ? [testRecipient] : [
     "vikram@gmcpl.net",
     "dh@gmcpl.net",
     "arun@gmcpl.net",
