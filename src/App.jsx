@@ -929,52 +929,6 @@ Status: ${sh?.label||"—"}`;
         <div style={{fontSize:10,color:C.t4,letterSpacing:"0.12em",fontWeight:700,textTransform:"uppercase"}}>
           {entries.length} {entries.length===1?"Entry":"Entries"} — Newest first
         </div>
-        <button onClick={()=>!resending&&setShowResendPicker(true)} disabled={resending} style={{
-          background:resending?"rgba(255,255,255,0.05)":"rgba(48,209,88,0.12)",
-          border:"none",borderRadius:9,
-          color:resending?C.t4:C.green,
-          fontSize:12,fontWeight:700,
-          padding:"7px 13px",fontFamily:"inherit",
-          cursor:resending?"default":"pointer",
-          transition:"all 0.2s",
-        }}>
-          {resending?"Sending...":"Resend"}
-        </button>
-        <button onClick={onFixAll} style={{
-          background:"rgba(48,209,88,0.12)",
-          border:"none",borderRadius:9,
-          color:"#30D158",
-          fontSize:12,fontWeight:700,
-          padding:"7px 13px",fontFamily:"inherit",
-          cursor:"pointer",
-        }}>
-          Fix All
-        </button>
-        <button onClick={async()=>{
-          const res = await fetch("/api/notify-email", {
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({
-              type:"sample",
-              ticket:{supplier:"TARIAWI AMR",mineReference:"TAOUS (TKT6)",tonnage:"4000 T",date:"02/03/2026",notes:"Test email — Gris un peu Rose"},
-              ts:"02 Mar, 09:14",
-              geo:{lat:31.0969,lng:-4.0102},
-              photoUrl:null,
-              testRecipient:"dh@gmcpl.net"
-            })
-          });
-          const d = await res.json();
-          alert(d.id ? "✅ Test email sent to dh@gmcpl.net" : "❌ Error: "+d.error);
-        }} style={{
-          background:"rgba(10,132,255,0.12)",
-          border:"none",borderRadius:9,
-          color:"#0A84FF",
-          fontSize:12,fontWeight:700,
-          padding:"7px 13px",fontFamily:"inherit",
-          cursor:"pointer",
-        }}>
-          Test Email
-        </button>
       </div>
       {entries.map((entry,idx)=>{
         const isTruck=entry.type==="truck",color=isTruck?C.green:C.accent;
@@ -1278,12 +1232,12 @@ export default function App() {
           padding:"13px 18px 11px",
         }}>
           <div style={{display:"flex",alignItems:"center",gap:13}}>
-            <div style={{height:40,paddingInline:10,borderRadius:13,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.22)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-              <img src="/logo.png" alt="BPI" style={{height:24,width:"auto",objectFit:"contain"}}/>
+            <div style={{height:40,width:40,borderRadius:13,background:"linear-gradient(135deg,#FF9F0A,#E8890A)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 4px 12px rgba(255,159,10,0.35)"}}>
+              <span style={{fontSize:16,fontWeight:900,color:"#000",letterSpacing:"-0.05em",lineHeight:1}}>B</span>
             </div>
             <div style={{flex:1}}>
               <div style={{fontSize:10,color:C.accent,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:700,marginBottom:1}}>Field Operations</div>
-              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.03em",color:C.t1}}>BPI Agadir</div>
+              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.03em",color:C.t1}}>BPI Tracker</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:5,background:"rgba(48,209,88,0.09)",border:"0.5px solid rgba(48,209,88,0.22)",borderRadius:20,padding:"5px 10px"}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:C.green,animation:"pulse 2s infinite"}}/>
@@ -1314,10 +1268,10 @@ export default function App() {
                     <div style={{
                       position:"absolute",top:5,right:5,
                       background:active?"rgba(0,0,0,0.25)":tab.color,color:active?"#fff":"#000",
-                      borderRadius:10,minWidth:16,height:16,
+                      borderRadius:10,minWidth:18,height:16,
                       display:"flex",alignItems:"center",justifyContent:"center",
                       fontSize:8,fontWeight:800,padding:"0 4px",lineHeight:1,
-                    }}>{tab.badge>99?"99+":tab.badge}</div>
+                    }}>{tab.badge}</div>
                   )}
                 </button>
               );
@@ -1332,10 +1286,10 @@ export default function App() {
           {mode==="log"    && <LogModule entries={log} onDelete={deleteLog} onResendAll={true} onUpdate={updateLog} onFixAll={fixAllSampleStatuses}/>}
           {!mode && (
             <div style={{padding:"80px 24px",textAlign:"center",animation:"fadeUp 0.5s ease"}}>
-              <div style={{width:76,height:76,borderRadius:24,background:"rgba(255,159,10,0.09)",border:"0.5px solid rgba(255,159,10,0.18)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px"}}>
-                <img src="/logo.png" alt="BPI" style={{height:44,objectFit:"contain"}}/>
+              <div style={{width:76,height:76,borderRadius:24,background:"linear-gradient(135deg,#FF9F0A,#E8890A)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",boxShadow:"0 8px 28px rgba(255,159,10,0.35)"}}>
+                <span style={{fontSize:28,fontWeight:900,color:"#000",letterSpacing:"-0.05em",lineHeight:1}}>B</span>
               </div>
-              <div style={{fontSize:20,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",marginBottom:8}}>BPI Agadir Tracker</div>
+              <div style={{fontSize:20,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",marginBottom:8}}>BPI Tracker</div>
               <div style={{fontSize:14,color:C.t4,lineHeight:1.7,maxWidth:260,margin:"0 auto"}}>
                 Select Sample to register a ticket<br/>or Truck to log a transport
               </div>
