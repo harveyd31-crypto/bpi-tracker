@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  const { type, ticket, ts, geo, photoUrl, testRecipient } = req.body;
+  const { type, ticket, ts, geo, photoUrl, extraPhotos, testRecipient } = req.body;
   if (!type || !ticket) return res.status(400).json({ error: "Missing data" });
 
   const apiKey = process.env.RESEND_API_KEY;
@@ -22,6 +22,15 @@ export default async function handler(req, res) {
     <div style="margin-top:24px;">
       <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Slip Photo</div>
       <img src="${photoUrl}" style="width:100%;max-width:480px;border-radius:8px;display:block;" />
+    </div>` : "";
+
+  const extraPhotosArr = Array.isArray(extraPhotos) ? extraPhotos : [];
+  const extraPhotosSection = extraPhotosArr.length > 0 ? `
+    <div style="margin-top:24px;">
+      <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">📸 Extra Photos (${extraPhotosArr.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${extraPhotosArr.map((url, i) => `<img src="${url}" style="width:${extraPhotosArr.length===1?'100%':'48%'};max-width:240px;border-radius:8px;display:block;object-fit:cover;" />`).join("")}
+      </div>
     </div>` : "";
 
   const geoSection = geo ? `
@@ -93,6 +102,7 @@ export default async function handler(req, res) {
     <div style="padding:8px 28px 28px;">
       ${geoSection}
       ${photoSection}
+      ${extraPhotosSection}
     </div>
 
     <!-- Footer -->

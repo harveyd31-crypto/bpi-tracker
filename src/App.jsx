@@ -241,15 +241,18 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
   const [geo,setGeo]         = useState(null);
   const [geoMsg,setGeoMsg]   = useState("");
   const [saving,setSaving]   = useState(false);
+  const [extraPhotos,setExtraPhotos] = useState([]); // [{preview,url,uploading}]
   const camRef  = useRef(null);
   const upRef   = useRef(null);
+  const extraCamRef = useRef(null);
+  const extraUpRef  = useRef(null);
 
   const SF=[["ticketNo","Ticket No"],["date","Date"],["supplier","Supplier"],["mineReference","Mine Ref"],["tonnage","Tonnage"],["collectionPoint","Collection Point"],["notes","Notes"]];
   const TF=[["ticketNo","N° Ticket"],["date","Date"],["lieuChargement","Lieu chargement"],["lieuLivraison","Lieu livraison"],["marchandise","Marchandise"],["transporteur","Transporteur"],["immatriculation","Immatriculation"],["heureDepart","Heure départ"],["fournisseur","Fournisseur"],["mineReference","Mine Ref"],["qualiteProduit","Qualité produit"],["poidsBrut","Poids brut"],["poidsTare","Poids tare"],["poidsNet","Poids net"],["responsableStock","Responsable"],["numeroChauffeur","N° Chauffeur"],["societe","Société"]];
   const fields = context==="sample"?SF:TF;
   const wF = ["poidsBrut","poidsTare","poidsNet"];
 
-  function reset(){setState("idle");setPreview(null);setExtracted(null);setEdited({});setGeo(null);setGeoMsg("");setSaving(false);}
+  function reset(){setState("idle");setPreview(null);setExtracted(null);setEdited({});setGeo(null);setGeoMsg("");setSaving(false);setExtraPhotos([]);}
 
   function captureGps(){
     if(!navigator.geolocation){setGeoMsg("GPS unavailable");return;}
@@ -282,11 +285,36 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
     }
   }
 
+  async function handleExtraPhoto(file) {
+    if(!file || extraPhotos.length>=3) return;
+    const idx = extraPhotos.length;
+    const reader=new FileReader();
+    reader.onload=e=>{
+      setExtraPhotos(p=>{const n=[...p];n[idx]={preview:e.target.result,url:null,uploading:true};return n;});
+    };
+    reader.readAsDataURL(file);
+    const folder=context==="sample"?"sample-extra":"truck-extra";
+    try {
+      const url=await uploadPhoto(file,folder);
+      setExtraPhotos(p=>{const n=[...p];if(n[idx])n[idx]={...n[idx],url,uploading:false};return n;});
+    } catch {
+      setExtraPhotos(p=>{const n=[...p];if(n[idx])n[idx]={...n[idx],url:null,uploading:false};return n;});
+    }
+  }
+
+  function removeExtraPhoto(idx) {
+    setExtraPhotos(p=>p.filter((_,i)=>i!==idx));
+  }
+
   async function confirm() {
     const filled=Object.keys(edited).filter(k=>edited[k]&&!k.startsWith("_"));
     if(!filled.length){alert("Please fill at least one field.");return;}
+    // Wait for any extra photos still uploading
+    const stillUploading = extraPhotos.some(p=>p.uploading);
+    if(stillUploading){alert("Photos still uploading, please wait…");return;}
     setSaving(true);
-    try { const payload={...edited,_scanned:true,_geo:geo||null}; reset(); await onScanned(payload); }
+    const extraUrls = extraPhotos.map(p=>p.url).filter(Boolean);
+    try { const payload={...edited,_scanned:true,_geo:geo||null,...(extraUrls.length?{_extraPhotos:extraUrls}:{})}; reset(); await onScanned(payload); }
     catch(err){ alert("Error: "+(err.message||String(err))); }
     finally{ setSaving(false); }
   }
@@ -295,6 +323,8 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
     <div style={{animation:"fadeUp 0.3s ease"}}>
       <input ref={camRef} type="file" accept="image/*" capture="environment" onChange={e=>{reset();setTimeout(()=>handle(e.target.files[0]),50);}} style={{display:"none"}}/>
       <input ref={upRef}  type="file" accept="image/*" onChange={e=>{reset();setTimeout(()=>handle(e.target.files[0]),50);}} style={{display:"none"}}/>
+      <input ref={extraCamRef} type="file" accept="image/*" capture="environment" onChange={e=>{if(e.target.files[0])handleExtraPhoto(e.target.files[0]);e.target.value="";}} style={{display:"none"}}/>
+      <input ref={extraUpRef}  type="file" accept="image/*" onChange={e=>{if(e.target.files[0])handleExtraPhoto(e.target.files[0]);e.target.value="";}} style={{display:"none"}}/>
 
       {/* Scan buttons */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
@@ -373,6 +403,49 @@ function ScanPanel({context,onScanned,existingData={},onManual}) {
             {fields.filter(([k])=>!wF.includes(k)).map(([k,l])=>(
               <Field key={k} label={l} value={edited[k]||""} onChange={e=>setEdited(p=>({...p,[k]:e.target.value}))} highlight={!!(extracted&&extracted[k])}/>
             ))}
+          </div>
+          {/* Extra Photos */}
+          <Divider/>
+          <div style={{padding:"14px 18px"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div>
+                <div style={{fontSize:10,color:C.purple,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>📸 Extra Photos</div>
+                <div style={{fontSize:11,color:C.t4,marginTop:2}}>{context==="sample"?"Stock pile, material, etc.":"Loading, truck, cargo, etc."} · Optional</div>
+              </div>
+              <span style={{fontSize:11,color:C.t4,fontWeight:600}}>{extraPhotos.length}/3</span>
+            </div>
+            {extraPhotos.length>0 && (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                {extraPhotos.map((p,i)=>(
+                  <div key={i} style={{position:"relative",borderRadius:12,overflow:"hidden",border:`0.5px solid ${p.uploading?C.accent+"50":C.border}`,aspectRatio:"1"}}>
+                    <img src={p.preview} alt={`extra ${i+1}`} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",opacity:p.uploading?0.5:1}}/>
+                    {p.uploading && (
+                      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.4)"}}>
+                        <Spinner size={18} color={C.accent}/>
+                      </div>
+                    )}
+                    {!p.uploading && !p.url && (
+                      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(255,69,58,0.85)",padding:"3px 0",textAlign:"center",fontSize:9,color:"#fff",fontWeight:700}}>Failed</div>
+                    )}
+                    <button onClick={()=>removeExtraPhoto(i)} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,0.7)",border:"none",borderRadius:"50%",color:"#fff",width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,padding:0,lineHeight:1}}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {extraPhotos.length<3 && (
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <button className="tapSm" onClick={()=>extraCamRef.current?.click()} style={{
+                  background:`${C.purple}12`,border:`0.5px solid ${C.purple}30`,borderRadius:11,
+                  padding:"11px 10px",color:C.purple,fontWeight:600,fontSize:12,
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                }}>📷 Take Photo</button>
+                <button className="tapSm" onClick={()=>extraUpRef.current?.click()} style={{
+                  background:"rgba(255,255,255,0.04)",border:`0.5px solid ${C.border}`,borderRadius:11,
+                  padding:"11px 10px",color:C.t3,fontWeight:500,fontSize:12,
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                }}>🖼 Gallery</button>
+              </div>
+            )}
           </div>
           <div style={{padding:"4px 18px 18px"}}>
             {!edited.ticketNo&&!edited.supplier && (
@@ -527,7 +600,7 @@ Collection:  ${ticket.collectionPoint||"—"}
 ${ticket.notes?"Notes:       "+ticket.notes+"\n":""}--------------------
 Status: Collected`
     );
-    sendEmail("sample", ticket, now, geo, ticket._photoUrl||null);
+    sendEmail("sample", ticket, now, geo, ticket._photoUrl||null, ticket._extraPhotos||[]);
     // Auto-clear after collection — no pipeline stages needed
     await window.storage.delete(SAMPLE_KEY, true);
     setData(null); lastS.current=null;
@@ -646,7 +719,7 @@ Vers:        ${t.lieuLivraison||"—"}
 --------------------
 Status: Loaded — weights TBD`
     );
-    sendEmail("truck", t, now3, null, t._photoUrl||null);
+    sendEmail("truck", t, now3, null, t._photoUrl||null, t._extraPhotos||[]);
   }
 
   async function logUnloaded(sc){
@@ -935,6 +1008,12 @@ Status: ${sh?.label||"—"}`;
                     }}
                   >Slip</button>
                 )}
+                {et._extraPhotos && et._extraPhotos.length>0 && (
+                  <span style={{
+                    background:"rgba(191,90,242,0.12)",border:"none",borderRadius:8,color:"#BF5AF2",
+                    fontSize:11,fontWeight:700,padding:"6px 10px",
+                  }}>📸 {et._extraPhotos.length}</span>
+                )}
                 <button onClick={e=>{e.stopPropagation();startEdit(e,entry);}} style={{background:"rgba(10,132,255,0.12)",border:"none",borderRadius:8,color:"#0A84FF",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit"}}>Edit</button>
                 <button onClick={e=>{e.stopPropagation();handleDelete(e,entry.id);}} style={{background:confirming===entry.id?"#FF453A":"rgba(255,69,58,0.12)",border:"none",borderRadius:8,color:confirming===entry.id?"#fff":"#FF453A",fontSize:12,fontWeight:700,padding:"6px 12px",fontFamily:"inherit",transition:"all 0.2s"}}>
                   {confirming===entry.id?"Confirm?":"Delete"}
@@ -973,7 +1052,7 @@ Status: ${sh?.label||"—"}`;
                     <Divider/>
                     <div style={{padding:"12px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Photo</div>
+                        <div style={{fontSize:10,color:C.t4,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700}}>Ticket Photo</div>
                         <button
                           onClick={e=>{e.stopPropagation();downloadSlip(et._photoUrl,`BPI-${entry.type==="truck"?"TRUCK":"SAMPLE"}-${et.ticketNo||et.supplier||entry.id}.jpg`);}}
                           style={{
@@ -987,6 +1066,21 @@ Status: ${sh?.label||"—"}`;
                       <a href={et._photoUrl} target="_blank" rel="noreferrer">
                         <img src={et._photoUrl} alt="ticket" style={{width:"100%",borderRadius:11,display:"block",maxHeight:180,objectFit:"cover"}}/>
                       </a>
+                    </div>
+                  </>
+                )}
+                {et._extraPhotos && et._extraPhotos.length>0 && (
+                  <>
+                    <Divider/>
+                    <div style={{padding:"12px 16px"}}>
+                      <div style={{fontSize:10,color:C.purple,letterSpacing:"0.08em",textTransform:"uppercase",fontWeight:700,marginBottom:8}}>📸 Extra Photos ({et._extraPhotos.length})</div>
+                      <div style={{display:"grid",gridTemplateColumns:et._extraPhotos.length===1?"1fr":"1fr 1fr 1fr",gap:8}}>
+                        {et._extraPhotos.map((url,pi)=>(
+                          <a key={pi} href={url} target="_blank" rel="noreferrer" style={{borderRadius:11,overflow:"hidden",border:`0.5px solid ${C.border}`,display:"block"}}>
+                            <img src={url} alt={`extra ${pi+1}`} style={{width:"100%",aspectRatio:"1",objectFit:"cover",display:"block"}}/>
+                          </a>
+                        ))}
+                      </div>
                     </div>
                   </>
                 )}
@@ -1075,12 +1169,12 @@ export default function App() {
   const [log,setLog]       = useState([]);
   const toastRef=useRef(null); const pollRef=useRef(null);
 
-  async function sendEmail(type, ticket, ts, geo, photoUrl) {
+  async function sendEmail(type, ticket, ts, geo, photoUrl, extraPhotos) {
     try {
       const res = await fetch("/api/notify-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, ticket, ts, geo, photoUrl }),
+        body: JSON.stringify({ type, ticket, ts, geo, photoUrl, extraPhotos: extraPhotos||[] }),
       });
       const data = await res.json();
       if (!res.ok) console.error("Email error:", data.error);
