@@ -1237,7 +1237,7 @@ export default function App() {
             </div>
             <div style={{flex:1}}>
               <div style={{fontSize:10,color:C.accent,letterSpacing:"0.14em",textTransform:"uppercase",fontWeight:700,marginBottom:1}}>Field Operations</div>
-              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.03em",color:C.t1}}>BPI Tracker</div>
+              <div style={{fontSize:17,fontWeight:700,letterSpacing:"-0.03em",color:C.t1}}>Geo Min Tracker</div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:5,background:"rgba(48,209,88,0.09)",border:"0.5px solid rgba(48,209,88,0.22)",borderRadius:20,padding:"5px 10px"}}>
               <div style={{width:5,height:5,borderRadius:"50%",background:C.green,animation:"pulse 2s infinite"}}/>
@@ -1289,7 +1289,7 @@ export default function App() {
               <div style={{width:76,height:76,borderRadius:24,background:"linear-gradient(135deg,#FF9F0A,#E8890A)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 20px",boxShadow:"0 8px 28px rgba(255,159,10,0.35)"}}>
                 <span style={{fontSize:28,fontWeight:900,color:"#000",letterSpacing:"-0.05em",lineHeight:1}}>B</span>
               </div>
-              <div style={{fontSize:20,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",marginBottom:8}}>BPI Tracker</div>
+              <div style={{fontSize:20,fontWeight:700,color:C.t1,letterSpacing:"-0.03em",marginBottom:8}}>Geo Min Tracker</div>
               <div style={{fontSize:14,color:C.t4,lineHeight:1.7,maxWidth:260,margin:"0 auto"}}>
                 Select Sample to register a ticket<br/>or Truck to log a transport
               </div>
